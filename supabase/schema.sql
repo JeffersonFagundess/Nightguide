@@ -1,0 +1,482 @@
+create extension if not exists pgcrypto;
+
+do $$
+begin
+  create type public.user_role as enum ('admin', 'owner', 'customer', 'promoter');
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  create type public.event_status as enum ('draft', 'published', 'cancelled');
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  create type public.ticket_status as enum ('interested', 'reserved', 'paid', 'cancelled');
+exception
+  when duplicate_object then null;
+end $$;
+
+create table if not exists public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  full_name text,
+  avatar_url text,
+  phone text,
+  bio text,
+  role public.user_role not null default 'customer',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.venues (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references public.profiles(id) on delete cascade,
+  name text not null,
+  slug text generated always as (
+    lower(regexp_replace(regexp_replace(name, '[^a-zA-Z0-9]+', '-', 'g'), '(^-|-$)', '', 'g'))
+  ) stored,
+  category text not null default 'Bar e evento',
+  description text,
+  address text,
+  neighborhood text,
+  city text not null default 'Saquarema',
+  state text not null default 'RJ',
+  latitude numeric(10, 8),
+  longitude numeric(11, 8),
+  phone text,
+  whatsapp text,
+  instagram text,
+  website_url text,
+  logo_url text,
+  cover_url text,
+  rating numeric(3, 2) not null default 0,
+  review_count integer not null default 0,
+  is_published boolean not null default false,
+  is_partner boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.events (
+  id uuid primary key default gen_random_uuid(),
+  venue_id uuid not null references public.venues(id) on delete cascade,
+  creator_id uuid not null references public.profiles(id) on delete cascade,
+  title text not null,
+  description text,
+  starts_at timestamptz not null,
+  ends_at timestamptz,
+  cover_url text,
+  price numeric(10, 2) not null default 0,
+  ticket_url text,
+  genre text,
+  mood text,
+  capacity integer,
+  status public.event_status not null default 'draft',
+  is_featured boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.event_images (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid not null references public.events(id) on delete cascade,
+  url text not null,
+  alt_text text,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.venue_images (
+  id uuid primary key default gen_random_uuid(),
+  venue_id uuid not null references public.venues(id) on delete cascade,
+  url text not null,
+  alt_text text,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.saved_events (
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  event_id uuid not null references public.events(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (user_id, event_id)
+);
+
+create table if not exists public.saved_venues (
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  venue_id uuid not null references public.venues(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (user_id, venue_id)
+);
+
+create table if not exists public.tickets (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  event_id uuid not null references public.events(id) on delete cascade,
+  status public.ticket_status not null default 'interested',
+  quantity integer not null default 1 check (quantity > 0),
+  amount numeric(10, 2) not null default 0,
+  customer_note text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, event_id)
+);
+
+create table if not exists public.reviews (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  venue_id uuid not null references public.venues(id) on delete cascade,
+  rating integer not null check (rating between 1 and 5),
+  comment text,
+  visited_at date,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, venue_id)
+);
+
+create table if not exists public.owner_messages (
+  id uuid primary key default gen_random_uuid(),
+  venue_id uuid not null references public.venues(id) on delete cascade,
+  sender_id uuid references public.profiles(id) on delete set null,
+  sender_name text,
+  sender_email text,
+  message text not null,
+  is_read boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.impact_metrics (
+  id uuid primary key default gen_random_uuid(),
+  venue_id uuid references public.venues(id) on delete cascade,
+  event_id uuid references public.events(id) on delete cascade,
+  metric_name text not null,
+  metric_value numeric not null,
+  source text not null default 'app',
+  recorded_at timestamptz not null default now()
+);
+
+create index if not exists venues_owner_id_idx on public.venues(owner_id);
+create index if not exists venues_published_idx on public.venues(is_published);
+create index if not exists events_venue_id_idx on public.events(venue_id);
+create index if not exists events_creator_id_idx on public.events(creator_id);
+create index if not exists events_status_starts_at_idx on public.events(status, starts_at);
+create index if not exists tickets_user_id_idx on public.tickets(user_id);
+create index if not exists reviews_venue_id_idx on public.reviews(venue_id);
+create index if not exists impact_metrics_event_id_idx on public.impact_metrics(event_id);
+
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_set_updated_at on public.profiles;
+create trigger profiles_set_updated_at
+  before update on public.profiles
+  for each row execute function public.set_updated_at();
+
+drop trigger if exists venues_set_updated_at on public.venues;
+create trigger venues_set_updated_at
+  before update on public.venues
+  for each row execute function public.set_updated_at();
+
+drop trigger if exists events_set_updated_at on public.events;
+create trigger events_set_updated_at
+  before update on public.events
+  for each row execute function public.set_updated_at();
+
+drop trigger if exists tickets_set_updated_at on public.tickets;
+create trigger tickets_set_updated_at
+  before update on public.tickets
+  for each row execute function public.set_updated_at();
+
+drop trigger if exists reviews_set_updated_at on public.reviews;
+create trigger reviews_set_updated_at
+  before update on public.reviews
+  for each row execute function public.set_updated_at();
+
+create or replace function public.refresh_venue_rating()
+returns trigger
+language plpgsql
+as $$
+begin
+  update public.venues
+  set
+    rating = coalesce((select round(avg(rating)::numeric, 2) from public.reviews where venue_id = coalesce(new.venue_id, old.venue_id)), 0),
+    review_count = (select count(*) from public.reviews where venue_id = coalesce(new.venue_id, old.venue_id))
+  where id = coalesce(new.venue_id, old.venue_id);
+  return coalesce(new, old);
+end;
+$$;
+
+drop trigger if exists reviews_refresh_venue_rating on public.reviews;
+create trigger reviews_refresh_venue_rating
+  after insert or update or delete on public.reviews
+  for each row execute function public.refresh_venue_rating();
+
+alter table public.profiles enable row level security;
+alter table public.venues enable row level security;
+alter table public.events enable row level security;
+alter table public.event_images enable row level security;
+alter table public.venue_images enable row level security;
+alter table public.saved_events enable row level security;
+alter table public.saved_venues enable row level security;
+alter table public.tickets enable row level security;
+alter table public.reviews enable row level security;
+alter table public.owner_messages enable row level security;
+alter table public.impact_metrics enable row level security;
+
+drop policy if exists "Profiles are readable" on public.profiles;
+create policy "Profiles are readable"
+  on public.profiles for select
+  using ((select auth.uid()) = id);
+
+drop policy if exists "Users update own profile" on public.profiles;
+create policy "Users update own profile"
+  on public.profiles for update
+  using ((select auth.uid()) = id)
+  with check ((select auth.uid()) = id);
+
+drop policy if exists "Published venues are readable" on public.venues;
+create policy "Published venues are readable"
+  on public.venues for select
+  using (is_published = true or (select auth.uid()) = owner_id);
+
+drop policy if exists "Owners insert venues" on public.venues;
+create policy "Owners insert venues"
+  on public.venues for insert
+  with check ((select auth.uid()) = owner_id);
+
+drop policy if exists "Owners update own venues" on public.venues;
+create policy "Owners update own venues"
+  on public.venues for update
+  using ((select auth.uid()) = owner_id)
+  with check ((select auth.uid()) = owner_id);
+
+drop policy if exists "Owners delete own venues" on public.venues;
+create policy "Owners delete own venues"
+  on public.venues for delete
+  using ((select auth.uid()) = owner_id);
+
+drop policy if exists "Published events are readable" on public.events;
+create policy "Published events are readable"
+  on public.events for select
+  using (
+    status = 'published'
+    or (select auth.uid()) = creator_id
+    or exists (
+      select 1 from public.venues
+      where venues.id = events.venue_id and venues.owner_id = (select auth.uid())
+    )
+  );
+
+drop policy if exists "Owners create events" on public.events;
+create policy "Owners create events"
+  on public.events for insert
+  with check (
+    (select auth.uid()) = creator_id
+    and exists (
+      select 1 from public.venues
+      where venues.id = events.venue_id and venues.owner_id = (select auth.uid())
+    )
+  );
+
+drop policy if exists "Owners update events" on public.events;
+create policy "Owners update events"
+  on public.events for update
+  using (
+    exists (
+      select 1 from public.venues
+      where venues.id = events.venue_id and venues.owner_id = (select auth.uid())
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.venues
+      where venues.id = events.venue_id and venues.owner_id = (select auth.uid())
+    )
+  );
+
+drop policy if exists "Owners delete events" on public.events;
+create policy "Owners delete events"
+  on public.events for delete
+  using (
+    exists (
+      select 1 from public.venues
+      where venues.id = events.venue_id and venues.owner_id = (select auth.uid())
+    )
+  );
+
+drop policy if exists "Event images readable" on public.event_images;
+create policy "Event images readable"
+  on public.event_images for select
+  using (true);
+
+drop policy if exists "Owners manage event images" on public.event_images;
+create policy "Owners manage event images"
+  on public.event_images for all
+  using (
+    exists (
+      select 1
+      from public.events
+      join public.venues on venues.id = events.venue_id
+      where events.id = event_images.event_id and venues.owner_id = (select auth.uid())
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from public.events
+      join public.venues on venues.id = events.venue_id
+      where events.id = event_images.event_id and venues.owner_id = (select auth.uid())
+    )
+  );
+
+drop policy if exists "Venue images readable" on public.venue_images;
+create policy "Venue images readable"
+  on public.venue_images for select
+  using (true);
+
+drop policy if exists "Owners manage venue images" on public.venue_images;
+create policy "Owners manage venue images"
+  on public.venue_images for all
+  using (
+    exists (
+      select 1 from public.venues
+      where venues.id = venue_images.venue_id and venues.owner_id = (select auth.uid())
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.venues
+      where venues.id = venue_images.venue_id and venues.owner_id = (select auth.uid())
+    )
+  );
+
+drop policy if exists "Users manage saved events" on public.saved_events;
+create policy "Users manage saved events"
+  on public.saved_events for all
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+
+drop policy if exists "Users manage saved venues" on public.saved_venues;
+create policy "Users manage saved venues"
+  on public.saved_venues for all
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+
+drop policy if exists "Users manage own tickets" on public.tickets;
+create policy "Users manage own tickets"
+  on public.tickets for all
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+
+drop policy if exists "Owners read venue tickets" on public.tickets;
+create policy "Owners read venue tickets"
+  on public.tickets for select
+  using (
+    exists (
+      select 1
+      from public.events
+      join public.venues on venues.id = events.venue_id
+      where events.id = tickets.event_id and venues.owner_id = (select auth.uid())
+    )
+  );
+
+drop policy if exists "Reviews are readable" on public.reviews;
+create policy "Reviews are readable"
+  on public.reviews for select
+  using (true);
+
+drop policy if exists "Users create reviews" on public.reviews;
+create policy "Users create reviews"
+  on public.reviews for insert
+  with check ((select auth.uid()) = user_id);
+
+drop policy if exists "Users update own reviews" on public.reviews;
+create policy "Users update own reviews"
+  on public.reviews for update
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+
+drop policy if exists "Users delete own reviews" on public.reviews;
+create policy "Users delete own reviews"
+  on public.reviews for delete
+  using ((select auth.uid()) = user_id);
+
+drop policy if exists "Owners read venue messages" on public.owner_messages;
+create policy "Owners read venue messages"
+  on public.owner_messages for select
+  using (
+    exists (
+      select 1 from public.venues
+      where venues.id = owner_messages.venue_id and venues.owner_id = (select auth.uid())
+    )
+  );
+
+drop policy if exists "Anyone creates owner messages" on public.owner_messages;
+create policy "Anyone creates owner messages"
+  on public.owner_messages for insert
+  with check (true);
+
+drop policy if exists "Owners update venue messages" on public.owner_messages;
+create policy "Owners update venue messages"
+  on public.owner_messages for update
+  using (
+    exists (
+      select 1 from public.venues
+      where venues.id = owner_messages.venue_id and venues.owner_id = (select auth.uid())
+    )
+  );
+
+drop policy if exists "Owners read impact metrics" on public.impact_metrics;
+create policy "Owners read impact metrics"
+  on public.impact_metrics for select
+  using (
+    venue_id is null
+    or exists (
+      select 1 from public.venues
+      where venues.id = impact_metrics.venue_id and venues.owner_id = (select auth.uid())
+    )
+  );
+
+create schema if not exists private;
+
+create or replace function private.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+begin
+  insert into public.profiles (id, full_name, role)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data ->> 'full_name', new.email),
+    'customer'
+  )
+  on conflict (id) do nothing;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function private.handle_new_user();
+
+insert into storage.buckets (id, name, public)
+values
+  ('venue-covers', 'venue-covers', true),
+  ('event-covers', 'event-covers', true)
+on conflict (id) do nothing;
