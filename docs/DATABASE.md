@@ -151,8 +151,12 @@ Campos:
 - `rating`
 - `comment`
 - `visited_at`
+- `image_url`
+- `author_name`
+- `author_avatar_url`
 
 Tem `unique (user_id, venue_id)` para um review por usuario/local.
+O nome e avatar publicos do autor sao copiados pelo trigger `private.set_review_author`, sem liberar telefone, bio ou outros campos do perfil.
 
 ### owner_messages
 
@@ -214,6 +218,10 @@ Atualiza `updated_at` em:
 ### refresh_venue_rating
 
 Recalcula `rating` e `review_count` do local quando reviews sao inseridas, atualizadas ou deletadas.
+
+### set_review_author
+
+Preenche o nome e avatar publicos da publicacao a partir do perfil autenticado. A funcao fica no schema `private`, limpa o `search_path` e nao pode ser chamada diretamente por `anon` ou `authenticated`.
 
 ### handle_new_user
 
@@ -282,8 +290,16 @@ Buckets criados:
 
 - `venue-covers`
 - `event-covers`
+- `review-media`
 
-Eles estao publicos para facilitar MVP e apresentacao. Para producao real, recomenda-se:
+As capas e fotos publicadas usam URLs publicas. No bucket `review-media`:
+
+- o tamanho maximo e 6 MB
+- somente JPEG, PNG e WebP sao aceitos
+- cada usuario grava, substitui e remove apenas arquivos dentro da propria pasta
+- a listagem dos objetos nao e publica
+
+Para producao real, recomenda-se:
 
 - validar tamanho e tipo de arquivo
 - criar politicas de Storage para upload apenas do dono

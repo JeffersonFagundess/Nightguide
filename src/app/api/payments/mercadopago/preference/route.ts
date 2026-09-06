@@ -18,7 +18,7 @@ type MercadoPagoPreferenceResponse = {
 export async function POST(request: Request) {
   const debugId = crypto.randomUUID();
   try {
-    const session = await getCurrentSession();
+    const session = await getCurrentSession(request);
     if (!session) {
       console.warn("[NightGuide][MercadoPago][preference:unauthorized]", { debugId });
       return NextResponse.json({ error: "Login necessario para comprar ingresso." }, { status: 401 });

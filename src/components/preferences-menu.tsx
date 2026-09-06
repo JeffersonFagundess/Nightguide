@@ -42,14 +42,14 @@ export function PreferenceSwitches({ compact = false }: { compact?: boolean }) {
   const { theme, language, setTheme, setLanguage } = usePreferences();
 
   return (
-    <div className={`flex min-w-0 items-center ${compact ? "gap-4" : "gap-2 sm:gap-5"} text-xs font-semibold uppercase tracking-[0.08em]`}>
+    <div className={`flex min-w-0 shrink-0 items-center ${compact ? "gap-2 sm:gap-4" : "gap-2 sm:gap-5"} text-xs font-semibold uppercase tracking-[0.08em]`}>
       <div className="inline-flex items-center gap-1.5 sm:gap-2" aria-label="Tema">
         <button
           onClick={() => setTheme("dark")}
           className={`inline-flex items-center gap-1 transition ${theme === "dark" ? "text-[color:var(--accent)]" : "text-[color:var(--muted)] hover:text-[color:var(--foreground)]"}`}
         >
           <Moon size={13} aria-hidden />
-          {compact ? <span className="sr-only">Dark</span> : <span className="hidden min-[390px]:inline">Dark</span>}
+          {compact ? <span className="sr-only">Dark</span> : <span className="hidden sm:inline">Dark</span>}
         </button>
         <span className="text-[color:var(--muted)]/50">/</span>
         <button
@@ -57,7 +57,7 @@ export function PreferenceSwitches({ compact = false }: { compact?: boolean }) {
           className={`inline-flex items-center gap-1 transition ${theme === "light" ? "text-[color:var(--accent)]" : "text-[color:var(--muted)] hover:text-[color:var(--foreground)]"}`}
         >
           <Sun size={13} aria-hidden />
-          {compact ? <span className="sr-only">Light</span> : <span className="hidden min-[390px]:inline">Light</span>}
+          {compact ? <span className="sr-only">Light</span> : <span className="hidden sm:inline">Light</span>}
         </button>
       </div>
 

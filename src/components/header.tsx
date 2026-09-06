@@ -15,7 +15,7 @@ export async function Header() {
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[10px] bg-white/[0.04] p-1 shadow-[0_0_0_1px_rgba(255,255,255,0.12)_inset,0_18px_36px_rgba(255,119,92,0.18)] sm:h-12 sm:w-12">
             <BrandMark className="h-full w-full drop-shadow-[0_8px_16px_rgba(0,0,0,0.35)]" />
           </span>
-          <span className="max-[380px]:hidden">
+          <span className="max-[520px]:hidden">
             <span className="block text-lg font-semibold leading-5 text-[color:var(--foreground)]">NightGuide</span>
             <span className="hidden text-xs uppercase tracking-[0.24em] text-[color:var(--muted)] sm:block">
               Saquarema

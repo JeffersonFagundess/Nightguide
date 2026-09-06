@@ -2,7 +2,9 @@
 
 NightGuide e uma aplicacao web/mobile hibrida para centralizar eventos, bares e experiencias noturnas em Saquarema-RJ. O projeto nasceu como trabalho de faculdade/extensao e foi evoluido para um MVP moderno com carrossel full screen, mapa, autenticacao, conta de cliente, painel de dono de estabelecimento, PWA, modo claro/escuro, idiomas PT/EN e simulacao de compra de ingressos com Mercado Pago.
 
-> Status atual: MVP hibrido/PWA pronto para Vercel. A futura migracao nativa deve acontecer na branch `native-regression`.
+> Status atual: MVP hibrido/PWA pronto para Vercel e regressao nativa em desenvolvimento ativo na branch `native-regression`.
+
+Na branch `native-regression`, a nova base Expo/React Native fica em `apps/mobile`. Ela convive com a versao web e ja inclui cadastro/login por email e senha, Google opcional, descoberta, favoritos, mapa/localizacao, ingressos com QR, scanner, notificacoes locais, painel nativo de estabelecimento e publicacoes com foto que sincronizam depois do uso offline.
 
 ## Links uteis
 
@@ -84,6 +86,7 @@ Nunca suba `.env.local`, `.env.vercel.production`, Access Token, service role ke
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md): deploy na Vercel.
 - [`docs/BRANCHING.md`](docs/BRANCHING.md): estrategia de branches.
 - [`docs/NATIVE_ROADMAP.md`](docs/NATIVE_ROADMAP.md): plano para migracao nativa.
+- [`docs/MOBILE_SETUP.md`](docs/MOBILE_SETUP.md): configuracao e execucao do app Expo/React Native.
 
 ## Estrutura
 

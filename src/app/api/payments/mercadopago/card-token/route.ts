@@ -20,7 +20,7 @@ type CardTokenResponse = {
 export async function POST(request: Request) {
   const debugId = crypto.randomUUID();
   try {
-    const session = await getCurrentSession();
+    const session = await getCurrentSession(request);
     if (!session) {
       console.warn("[NightGuide][MercadoPago][card-token:unauthorized]", { debugId });
       return NextResponse.json({ error: "Login necessario para tokenizar cartao." }, { status: 401 });

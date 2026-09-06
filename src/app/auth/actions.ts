@@ -37,14 +37,11 @@ export async function register(_prevState: string | null, formData: FormData) {
   const next = sanitizeNext(String(formData.get("next") ?? ""));
 
   const supabase = await createClient();
-  const headerStore = await headers();
-  const origin = process.env.NEXT_PUBLIC_SITE_URL ?? headerStore.get("origin") ?? "http://localhost:3000";
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
       data: { full_name: name },
-      emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next ?? "/conta")}`,
     },
   });
 
@@ -53,7 +50,7 @@ export async function register(_prevState: string | null, formData: FormData) {
   }
 
   if (!data.session) {
-    return "Conta criada. Confirme seu email e depois entre novamente no NightGuide.";
+    return "A conta foi criada, mas o login imediato ainda não foi liberado pelo servidor.";
   }
 
   await clearDemoSession();

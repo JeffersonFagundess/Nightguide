@@ -19,6 +19,9 @@ node_modules/
 
 # production
 /build
+**/.expo/
+/apps/mobile/dist/
+/apps/mobile/dist-test/
 
 # misc
 .DS_Store
@@ -45,3 +48,6 @@ dev-server*.log
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.vercel
+.env*

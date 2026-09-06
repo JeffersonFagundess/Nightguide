@@ -5,14 +5,14 @@ import { mercadoPagoFetch, normalizeMercadoPagoPayment } from "@/lib/mercadopago
 type MercadoPagoPaymentResponse = Parameters<typeof normalizeMercadoPagoPayment>[0];
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: {
     params: Promise<{ paymentId: string }>;
   },
 ) {
   const debugId = crypto.randomUUID();
   try {
-    const session = await getCurrentSession();
+    const session = await getCurrentSession(request);
     if (!session) {
       console.warn("[NightGuide][MercadoPago][payment-status:unauthorized]", { debugId });
       return NextResponse.json({ error: "Login necessario para consultar pagamento." }, { status: 401 });

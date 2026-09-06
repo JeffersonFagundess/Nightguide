@@ -2,7 +2,7 @@
 
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, Heart, Music2, Search, SlidersHorizontal, Star, Ticket, X } from "lucide-react";
+import { CalendarDays, Heart, MessageSquare, Music2, Search, SlidersHorizontal, Star, Ticket, X } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { Carousel } from "@/components/carousel";
 import { VenueMap } from "@/components/venue-map";
@@ -10,6 +10,8 @@ import { getClientUserScope, scopedStorageKey } from "@/lib/client-user-scope";
 import { localizeEvent, localizeVenue } from "@/lib/event-copy";
 import { queueOfflineAction } from "@/lib/offline-sync";
 import { copy, usePreferences } from "@/lib/preferences";
+import { createClient } from "@/lib/supabase/browser";
+import { hasSupabaseEnv } from "@/lib/supabase/env";
 import type { FeaturedEvent, Venue } from "@/lib/types";
 
 const filters = ["all", "parties", "food", "live", "comedy", "free", "nearby", "beach"] as const;
@@ -432,6 +434,9 @@ function EventDetails({
 }
 
 function VenueDetails({ venue, labels, onClose }: { venue: Venue; labels: (typeof copy)["pt"]["modal"]; onClose: () => void }) {
+  const [reviews, setReviews] = useState<VenueReview[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
+
   useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
@@ -440,6 +445,31 @@ function VenueDetails({ venue, labels, onClose }: { venue: Venue; labels: (typeo
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [onClose]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadReviews() {
+      setReviewsLoading(true);
+      try {
+        if (!hasSupabaseEnv() || !isUuid(venue.id)) return;
+        const { data } = await createClient()
+          .from("reviews")
+          .select("id,rating,comment,image_url,author_name,created_at")
+          .eq("venue_id", venue.id)
+          .order("created_at", { ascending: false })
+          .limit(50);
+        if (active && data) setReviews(data as VenueReview[]);
+      } finally {
+        if (active) setReviewsLoading(false);
+      }
+    }
+
+    void loadReviews();
+    return () => {
+      active = false;
+    };
+  }, [venue.id]);
 
   return (
     <div className="fixed inset-0 z-[9999] grid place-items-end bg-black/70 p-3 backdrop-blur-sm sm:place-items-center sm:p-6">
@@ -464,9 +494,49 @@ function VenueDetails({ venue, labels, onClose }: { venue: Venue; labels: (typeo
           <Detail label={labels.address} value={venue.address} />
           <Detail label={labels.rating} value={`${venue.rating.toFixed(1)} ${labels.stars}`} />
         </div>
+        <section className="mt-6 border-t border-white/10 pt-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--accent)]">Comunidade</p>
+              <h3 className="mt-1 text-xl font-semibold text-[color:var(--foreground)]">Publicações do local</h3>
+            </div>
+            <MessageSquare size={19} className="text-[color:var(--accent)]" aria-hidden />
+          </div>
+          {reviewsLoading ? <p className="mt-4 text-sm text-[color:var(--muted)]">Carregando comentários…</p> : reviews.length ? (
+            <div className="mt-4 grid gap-3">
+              {reviews.map((review) => (
+                <article key={review.id} className="overflow-hidden rounded-[8px] border border-white/10 bg-white/[0.035]">
+                  <div className="p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-semibold text-[color:var(--foreground)]">{review.author_name || "NightGuide"}</p>
+                      <p className="text-xs text-[color:var(--muted)]">{new Date(review.created_at).toLocaleDateString("pt-BR")}</p>
+                    </div>
+                    <p className="mt-1 text-xs text-[color:var(--muted)]">📍 {venue.name}</p>
+                    <p className="mt-3 text-sm leading-6 text-[color:var(--foreground)]">{review.comment}</p>
+                  </div>
+                  {review.image_url ? <img src={review.image_url} alt={`Foto publicada em ${venue.name}`} className="max-h-80 w-full object-cover" /> : null}
+                  <p className="px-4 py-3 text-sm tracking-[0.12em] text-[color:var(--accent)]">{"★".repeat(review.rating)}<span className="text-white/15">{"★".repeat(5 - review.rating)}</span></p>
+                </article>
+              ))}
+            </div>
+          ) : <p className="mt-4 text-sm leading-6 text-[color:var(--muted)]">Ainda não há publicações deste local.</p>}
+        </section>
       </article>
     </div>
   );
+}
+
+type VenueReview = {
+  id: string;
+  rating: number;
+  comment: string | null;
+  image_url: string | null;
+  author_name: string | null;
+  created_at: string;
+};
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function Detail({ label, value }: { label: string; value: string }) {
