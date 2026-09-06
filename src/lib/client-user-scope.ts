@@ -16,20 +16,39 @@ export async function getClientUserScope(): Promise<ClientUserScope> {
     } = await supabase.auth.getUser();
 
     if (user) {
-      return {
-        userId: user.id,
-        storageScope: `user:${user.id}`,
-        isAuthenticated: true,
-      };
+      return authenticatedScope(user.id);
     }
+
+    // getSession reads the persisted token locally and keeps offline data
+    // scoped to the same account when getUser cannot reach Supabase.
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (session?.user) return authenticatedScope(session.user.id);
   } catch {
-    // Keep the app usable even if auth is temporarily unreachable.
+    try {
+      const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session?.user) return authenticatedScope(session.user.id);
+    } catch {
+      // Keep the app usable even if auth is temporarily unreachable.
+    }
   }
 
   return {
     userId: null,
     storageScope: "guest",
     isAuthenticated: false,
+  };
+}
+
+function authenticatedScope(userId: string): ClientUserScope {
+  return {
+    userId,
+    storageScope: `user:${userId}`,
+    isAuthenticated: true,
   };
 }
 
