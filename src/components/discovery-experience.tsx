@@ -12,6 +12,7 @@ import { queueOfflineAction } from "@/lib/offline-sync";
 import { copy, usePreferences } from "@/lib/preferences";
 import { createClient } from "@/lib/supabase/browser";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
+import { getDemoReviews, type CommunityReview } from "@/lib/demo-reviews";
 import type { FeaturedEvent, Venue } from "@/lib/types";
 
 const filters = ["all", "parties", "food", "live", "comedy", "free", "nearby", "beach"] as const;
@@ -434,7 +435,7 @@ function EventDetails({
 }
 
 function VenueDetails({ venue, labels, onClose }: { venue: Venue; labels: (typeof copy)["pt"]["modal"]; onClose: () => void }) {
-  const [reviews, setReviews] = useState<VenueReview[]>([]);
+  const [reviews, setReviews] = useState<CommunityReview[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
 
   useEffect(() => {
@@ -451,15 +452,56 @@ function VenueDetails({ venue, labels, onClose }: { venue: Venue; labels: (typeo
 
     async function loadReviews() {
       setReviewsLoading(true);
+      const cacheKey = `nightguide:venue-reviews:v2:${venue.id}`;
       try {
-        if (!hasSupabaseEnv() || !isUuid(venue.id)) return;
+        const cached = readReviews(cacheKey);
+        const scope = await getClientUserScope();
+        const localFeedbacks = readLocalFeedbacks(scopedStorageKey("nightguide-feedbacks", scope.storageScope)).flatMap((item) => {
+          if (item.venue !== venue.name) return [];
+          return [{
+            ...item,
+            id: item.id,
+            user_id: scope.userId || undefined,
+            rating: Number(item.rating || 5),
+            comment: item.comment || item.text || "",
+            image_url: item.imageUrl || null,
+            image_data_url: item.imageDataUrl || null,
+            author_name: scope.userId ? "Você" : "NightGuide",
+            created_at: item.createdAt || new Date().toISOString(),
+          } satisfies CommunityReview];
+        });
+
+        if (cached.length) setReviews(mergeReviews(cached, localFeedbacks));
+        else if (localFeedbacks.length) setReviews(localFeedbacks);
+
+        if (!hasSupabaseEnv() || !isUuid(venue.id) || !navigator.onLine) {
+          const offlineReviews = cached.length || localFeedbacks.length ? mergeReviews(cached, localFeedbacks) : getDemoReviews(venue.name);
+          if (active) setReviews(offlineReviews);
+          return;
+        }
+
         const { data } = await createClient()
           .from("reviews")
-          .select("id,rating,comment,image_url,author_name,created_at")
+          .select("id,user_id,rating,comment,image_url,author_name,author_avatar_url,created_at")
           .eq("venue_id", venue.id)
           .order("created_at", { ascending: false })
           .limit(50);
-        if (active && data) setReviews(data as VenueReview[]);
+        const remote = (data || []).map((row) => ({
+          id: String(row.id),
+          user_id: String(row.user_id),
+          rating: Number(row.rating),
+          comment: String(row.comment || ""),
+          image_url: row.image_url ? String(row.image_url) : null,
+          author_name: String(row.author_name || "NightGuide"),
+          author_avatar_url: row.author_avatar_url ? String(row.author_avatar_url) : null,
+          created_at: String(row.created_at),
+        } satisfies CommunityReview));
+        const visible = mergeReviews(
+          remote.length ? remote : getDemoReviews(venue.name),
+          localFeedbacks,
+        );
+        if (active) setReviews(visible);
+        writeReviews(cacheKey, visible);
       } finally {
         if (active) setReviewsLoading(false);
       }
@@ -514,26 +556,65 @@ function VenueDetails({ venue, labels, onClose }: { venue: Venue; labels: (typeo
                     <p className="mt-1 text-xs text-[color:var(--muted)]">📍 {venue.name}</p>
                     <p className="mt-3 text-sm leading-6 text-[color:var(--foreground)]">{review.comment}</p>
                   </div>
-                  {review.image_url ? <img src={review.image_url} alt={`Foto publicada em ${venue.name}`} className="max-h-80 w-full object-cover" /> : null}
+                  {review.image_url || review.image_data_url ? <img src={review.image_url || review.image_data_url || ""} alt={`Foto publicada em ${venue.name}`} className="max-h-80 w-full object-cover" /> : null}
                   <p className="px-4 py-3 text-sm tracking-[0.12em] text-[color:var(--accent)]">{"★".repeat(review.rating)}<span className="text-white/15">{"★".repeat(5 - review.rating)}</span></p>
+                  {review.is_demo ? <p className="px-4 pb-3 text-[10px] font-semibold tracking-[0.16em] text-[color:var(--muted)]">EXEMPLO OFFLINE</p> : null}
                 </article>
               ))}
             </div>
           ) : <p className="mt-4 text-sm leading-6 text-[color:var(--muted)]">Ainda não há publicações deste local.</p>}
+          <a href="/conta" className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[6px] bg-[color:var(--accent)] px-4 font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--accent-strong)]">
+            <MessageSquare size={17} aria-hidden />
+            Publicar comentário com foto
+          </a>
         </section>
       </article>
     </div>
   );
 }
 
-type VenueReview = {
+function readReviews(key: string): CommunityReview[] {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(key) || "[]");
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
+type LocalFeedback = {
   id: string;
-  rating: number;
-  comment: string | null;
-  image_url: string | null;
-  author_name: string | null;
-  created_at: string;
+  venue?: string;
+  rating?: string | number;
+  text?: string;
+  comment?: string;
+  createdAt?: string;
+  imageDataUrl?: string;
+  imageUrl?: string;
 };
+
+function readLocalFeedbacks(key: string): LocalFeedback[] {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(key) || "[]");
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeReviews(key: string, reviews: CommunityReview[]) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(reviews));
+  } catch {
+    // A full cache must never hide the remote feed.
+  }
+}
+
+function mergeReviews(...groups: CommunityReview[][]) {
+  const unique = new Map<string, CommunityReview>();
+  groups.flat().forEach((review) => unique.set(review.id, review));
+  return [...unique.values()].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+}
 
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);

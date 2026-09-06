@@ -68,6 +68,7 @@ export type Review = {
   photoFileName?: string;
   authorName?: string;
   authorAvatarUrl?: string;
+  isDemo?: boolean;
 };
 
 export type OfflineActionType =

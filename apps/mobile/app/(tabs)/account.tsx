@@ -48,6 +48,12 @@ export default function AccountScreen() {
         {!configured ? <View style={styles.notice}><Text style={styles.noticeText}>Preencha as variáveis do Supabase para habilitar cadastro e login reais.</Text></View> : null}
         <Button label="Entrar com e-mail" onPress={() => router.push('/auth/login')} />
         <Button label="Criar conta" variant="secondary" onPress={() => router.push('/auth/register')} />
+        <View style={styles.guestPublishCard}>
+          <View style={styles.guestPublishIcon}><ImageIcon size={22} color={colors.accent} /></View>
+          <Text style={styles.guestPublishTitle}>Publicações com foto</Text>
+          <Text style={styles.guestPublishText}>Depois de entrar, você poderá escolher uma foto da galeria ou tirar uma foto, escrever o comentário e publicar mesmo sem internet.</Text>
+          <Button label="Entrar para publicar" icon={MessageSquare} onPress={() => router.push('/auth/login')} style={styles.guestPublishButton} />
+        </View>
       </Screen>
     );
   }
@@ -241,6 +247,11 @@ const styles = StyleSheet.create({
   avatar: { width: 62, height: 62, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(226,255,84,0.10)' },
   guestTitle: { color: colors.text, fontSize: 34, lineHeight: 38, fontWeight: '900', letterSpacing: -1.2, marginTop: 20 },
   guestText: { color: colors.muted, fontSize: 16, lineHeight: 23, marginTop: 11 },
+  guestPublishCard: { marginTop: 14, padding: 16, borderRadius: 17, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  guestPublishIcon: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(226,255,84,0.10)' },
+  guestPublishTitle: { color: colors.text, fontSize: 18, fontWeight: '900', marginTop: 12 },
+  guestPublishText: { color: colors.muted, fontSize: 13, lineHeight: 20, marginTop: 6 },
+  guestPublishButton: { marginTop: 13 },
   notice: { borderWidth: 1, borderColor: 'rgba(255,203,102,0.4)', backgroundColor: 'rgba(255,203,102,0.08)', padding: 13, borderRadius: 13, marginBottom: 4 },
   noticeText: { color: colors.warning, fontSize: 13, lineHeight: 19 },
   eyebrow: { color: colors.accent, fontSize: 11, fontWeight: '900', letterSpacing: 1.4, marginTop: 14 },

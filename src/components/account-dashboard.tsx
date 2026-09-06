@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, CalendarDays, Camera, CreditCard, Heart, MessageSquare, Pencil, Save, Ticket, Trash2, UsersRound } from "lucide-react";
+import { BarChart3, CalendarDays, Camera, CreditCard, Heart, Image as ImageIcon, MessageSquare, Pencil, Save, Ticket, Trash2, UsersRound, X } from "lucide-react";
 import type { DemoRole } from "@/lib/demo-session";
 import { getClientUserScope, scopedStorageKey } from "@/lib/client-user-scope";
 import { formatBRL, ticketsStorageBaseKey, type FakeTicket } from "@/lib/fake-tickets";
@@ -23,6 +23,11 @@ type Feedback = {
   venue: string;
   rating: string;
   text: string;
+  createdAt?: string;
+  userId?: string | null;
+  imageDataUrl?: string;
+  imageUrl?: string;
+  pending?: boolean;
 };
 
 export function AccountDashboard({ role, name, email, events, venues }: Props) {
@@ -47,6 +52,11 @@ function GuestPanel({ name, email, events, venues }: { name: string; email: stri
   const [venue, setVenue] = useState(venues[0]?.name ?? "");
   const [rating, setRating] = useState("5");
   const [comment, setComment] = useState("");
+  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  const [photoName, setPhotoName] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
+  const [online, setOnline] = useState(true);
+  const [savingFeedback, setSavingFeedback] = useState(false);
 
   const savedEvents = events.filter((event) => savedIds.includes(event.id));
 
@@ -63,6 +73,7 @@ function GuestPanel({ name, email, events, venues }: { name: string; email: stri
       setSavedKey(nextSavedKey);
       setTicketKey(nextTicketKey);
       setFeedbackKey(nextFeedbackKey);
+      setUserId(scope.userId);
       setSavedIds(JSON.parse(localStorage.getItem(nextSavedKey) || "[]") as string[]);
       setTickets(JSON.parse(localStorage.getItem(nextTicketKey) || "[]") as FakeTicket[]);
       setFeedbacks(JSON.parse(localStorage.getItem(nextFeedbackKey) || "[]") as Feedback[]);
@@ -74,14 +85,36 @@ function GuestPanel({ name, email, events, venues }: { name: string; email: stri
     };
   }, []);
 
-  function addFeedback() {
+  useEffect(() => {
+    const updateOnline = () => setOnline(navigator.onLine);
+    updateOnline();
+    window.addEventListener("online", updateOnline);
+    window.addEventListener("offline", updateOnline);
+    return () => {
+      window.removeEventListener("online", updateOnline);
+      window.removeEventListener("offline", updateOnline);
+    };
+  }, []);
+
+  async function addFeedback() {
     if (!comment.trim()) return;
+    setSavingFeedback(true);
     const selectedVenue = venues.find((item) => item.name === venue);
-    const feedback = { id: crypto.randomUUID(), venueId: selectedVenue?.id, venue, rating, text: comment.trim() };
+    const feedback: Feedback = {
+      id: crypto.randomUUID(),
+      venueId: selectedVenue?.id,
+      venue,
+      rating,
+      text: comment.trim(),
+      createdAt: new Date().toISOString(),
+      userId,
+      imageDataUrl: photoDataUrl || undefined,
+      pending: true,
+    };
     const next = [feedback, ...feedbacks];
     setFeedbacks(next);
     localStorage.setItem(feedbackKey, JSON.stringify(next));
-    void queueOfflineAction({
+    await queueOfflineAction({
       id: feedback.id,
       type: "review_created",
       entityType: "review",
@@ -91,9 +124,30 @@ function GuestPanel({ name, email, events, venues }: { name: string; email: stri
         venueName: venue,
         rating: Number(rating),
         comment: feedback.text,
+        imageDataUrl: photoDataUrl || undefined,
+        imageName: photoName || undefined,
       },
     });
     setComment("");
+    setPhotoDataUrl(null);
+    setPhotoName("");
+    setSavingFeedback(false);
+  }
+
+  async function choosePhoto(file: File | undefined) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return;
+    if (file.size > 6 * 1024 * 1024) {
+      window.alert("A foto precisa ter no máximo 6 MB.");
+      return;
+    }
+
+    try {
+      setPhotoDataUrl(await compressImage(file));
+      setPhotoName(file.name);
+    } catch {
+      window.alert("Não foi possível carregar essa foto.");
+    }
   }
 
   function removeFavorite(eventId: string) {
@@ -185,7 +239,7 @@ function GuestPanel({ name, email, events, venues }: { name: string; email: stri
           )}
         </Panel>
 
-        <Panel title="Avaliar estabelecimento">
+        <Panel title="Criar publicação com foto">
           <div className="grid gap-3">
             <label className="field-label">
               Local
@@ -207,9 +261,30 @@ function GuestPanel({ name, email, events, venues }: { name: string; email: stri
               Comentário
               <textarea value={comment} onChange={(event) => setComment(event.target.value)} className="field-input min-h-28 resize-none" />
             </label>
-            <button onClick={addFeedback} className="primary-button">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-[6px] border border-white/10 px-4 text-sm font-semibold text-[color:var(--foreground)] transition hover:border-[color:var(--accent)]">
+                <ImageIcon size={18} aria-hidden />
+                Escolher da galeria
+                <input type="file" accept="image/*" className="sr-only" onChange={(event) => void choosePhoto(event.target.files?.[0])} />
+              </label>
+              <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-[6px] border border-white/10 px-4 text-sm font-semibold text-[color:var(--foreground)] transition hover:border-[color:var(--accent)]">
+                <Camera size={18} aria-hidden />
+                Tirar foto
+                <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(event) => void choosePhoto(event.target.files?.[0])} />
+              </label>
+            </div>
+            {photoDataUrl ? (
+              <div className="relative overflow-hidden rounded-[8px] border border-white/10">
+                <img src={photoDataUrl} alt="Prévia da publicação" className="max-h-72 w-full object-cover" />
+                <button type="button" onClick={() => { setPhotoDataUrl(null); setPhotoName(""); }} className="absolute right-2 top-2 grid h-9 w-9 place-items-center rounded-full bg-black/75 text-white" aria-label="Remover foto">
+                  <X size={17} aria-hidden />
+                </button>
+              </div>
+            ) : null}
+            <p className="text-xs leading-5 text-[color:var(--muted)]">{online ? "Publica agora e mantém uma cópia offline." : "Sem internet: fica salvo neste aparelho e será enviado quando voltar."}</p>
+            <button onClick={() => void addFeedback()} disabled={savingFeedback || !comment.trim()} className="primary-button disabled:cursor-not-allowed disabled:opacity-60">
               <MessageSquare size={18} aria-hidden />
-              Enviar feedback
+              {savingFeedback ? "Salvando…" : "Publicar comentário"}
             </button>
           </div>
         </Panel>
@@ -217,7 +292,19 @@ function GuestPanel({ name, email, events, venues }: { name: string; email: stri
 
       <Panel title="Meus comentários" className="mt-6">
         {feedbacks.length ? (
-          feedbacks.map((item) => <Row key={item.id} title={item.venue} meta={item.text} action={`${item.rating}/5`} />)
+          feedbacks.map((item) => (
+            <article key={item.id} className="overflow-hidden rounded-[8px] border border-white/10 bg-white/[0.04]">
+              <div className="flex items-center justify-between gap-4 p-4">
+                <div className="min-w-0">
+                  <h3 className="truncate font-semibold text-[color:var(--foreground)]">📍 {item.venue}</h3>
+                  <p className="mt-1 line-clamp-2 text-sm text-[color:var(--muted)]">{item.text}</p>
+                  <p className="mt-2 text-xs text-[color:var(--muted)]">{item.pending ? "Salvo offline · aguardando sincronização" : "Publicado"}</p>
+                </div>
+                <span className="shrink-0 text-sm font-semibold text-[color:var(--accent)]">{item.rating}/5</span>
+              </div>
+              {item.imageDataUrl || item.imageUrl ? <img src={item.imageDataUrl || item.imageUrl} alt={`Foto publicada em ${item.venue}`} className="max-h-80 w-full object-cover" /> : null}
+            </article>
+          ))
         ) : (
           <p className="text-sm text-[color:var(--muted)]">Nenhum feedback enviado ainda.</p>
         )}
@@ -480,4 +567,31 @@ function Field({ label, value, onChange }: { label: string; value: string; onCha
       <input value={value} onChange={(event) => onChange(event.target.value)} className="field-input" />
     </label>
   );
+}
+
+function compressImage(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error || new Error("Não foi possível ler a imagem."));
+    reader.onload = () => {
+      const image = new window.Image();
+      image.onerror = () => reject(new Error("Imagem inválida."));
+      image.onload = () => {
+        const maxSide = 1400;
+        const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+        const context = canvas.getContext("2d");
+        if (!context) {
+          reject(new Error("Seu navegador não suporta prévia de imagem."));
+          return;
+        }
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.78));
+      };
+      image.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
 }

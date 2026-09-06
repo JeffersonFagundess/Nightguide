@@ -8,6 +8,7 @@ import { Screen } from '@/src/components/screen';
 import { EmptyState, LoadingState } from '@/src/components/state';
 import { isUuid, readJson, writeJson } from '@/src/lib/storage';
 import { supabase } from '@/src/lib/supabase';
+import { getDemoReviews } from '@/src/data/demo-reviews';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useNightData } from '@/src/providers/data-provider';
 import { useUserData } from '@/src/providers/user-data-provider';
@@ -29,10 +30,12 @@ export default function VenueProfileScreen() {
     if (!venueId) return;
     if (manual) setRefreshing(true);
     const cacheKey = `nightguide:venue-reviews:v1:${venueId}`;
+    const demoReviews = getDemoReviews(venue?.name);
 
     try {
       const cached = await readJson<Review[]>(cacheKey, []);
       if (cached.length) setRemoteReviews(cached);
+      else if (demoReviews.length) setRemoteReviews(demoReviews);
 
       if (!supabase || !isUuid(venueId)) return;
       const { data, error } = await supabase
@@ -55,10 +58,12 @@ export default function VenueProfileScreen() {
         authorName: String(row.author_name || 'NightGuide'),
         authorAvatarUrl: row.author_avatar_url ? String(row.author_avatar_url) : undefined,
       }));
-      setRemoteReviews(next);
-      await writeJson(cacheKey, next);
+      const visibleReviews = next.length ? next : demoReviews;
+      setRemoteReviews(visibleReviews);
+      await writeJson(cacheKey, visibleReviews);
     } catch {
       // Keep cached publications visible while offline.
+      if (!remoteReviews.length && demoReviews.length) setRemoteReviews(demoReviews);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -122,7 +127,10 @@ export default function VenueProfileScreen() {
               <Text style={styles.postDescription}>{review.comment}</Text>
               {review.photoUri || review.photoUrl ? <Image source={{ uri: review.photoUri || review.photoUrl }} resizeMode="cover" style={styles.postImage} /> : null}
               <View style={styles.postFooter}>
-                <Text style={styles.rating}>{'★'.repeat(review.rating)}<Text style={styles.ratingMuted}>{'★'.repeat(5 - review.rating)}</Text></Text>
+                <View style={styles.footerLeft}>
+                  <Text style={styles.rating}>{'★'.repeat(review.rating)}<Text style={styles.ratingMuted}>{'★'.repeat(5 - review.rating)}</Text></Text>
+                  {review.isDemo ? <Text style={styles.exampleLabel}>EXEMPLO</Text> : null}
+                </View>
               </View>
             </View>
           ))}
@@ -140,16 +148,14 @@ export default function VenueProfileScreen() {
           }}
         />
       )}
-      {publications.length ? (
-        <Button
-          label={user ? 'Publicar sobre este local' : 'Entrar para publicar'}
-          icon={MessageSquare}
-          onPress={() => user
-            ? router.push({ pathname: '/(tabs)/account', params: { venueId } })
-            : router.push({ pathname: '/auth/login', params: { next: `/venue/${venueId}` } })}
-          style={styles.publishButton}
-        />
-      ) : null}
+      <Button
+        label={user ? 'Publicar comentário com foto' : 'Entrar para publicar'}
+        icon={MessageSquare}
+        onPress={() => user
+          ? router.push({ pathname: '/(tabs)/account', params: { venueId } })
+          : router.push({ pathname: '/auth/login', params: { next: `/venue/${venueId}` } })}
+        style={styles.publishButton}
+      />
     </Screen>
   );
 }
@@ -182,7 +188,9 @@ const styles = StyleSheet.create({
   postDescription: { color: colors.text, fontSize: 14, lineHeight: 21, paddingHorizontal: 13, paddingBottom: 13 },
   postImage: { width: '100%', aspectRatio: 4 / 3, backgroundColor: colors.elevated },
   postFooter: { padding: 13 },
+  footerLeft: { gap: 5 },
   rating: { color: colors.accent, letterSpacing: 1 },
   ratingMuted: { color: colors.border },
+  exampleLabel: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
   publishButton: { marginTop: 18 },
 });

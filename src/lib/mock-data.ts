@@ -114,7 +114,7 @@ export const fallbackEvents: FeaturedEvent[] = [
 
 export const fallbackVenues: Venue[] = [
   {
-    id: "maralto",
+    id: "a1000000-0000-4000-8000-000000000001",
     name: "Quiosque Maralto",
     category: "Praia e música",
     rating: 4.8,
@@ -124,7 +124,7 @@ export const fallbackVenues: Venue[] = [
     vibe: "Vista, musica e grupos",
   },
   {
-    id: "vila-gastrobar",
+    id: "a1000000-0000-4000-8000-000000000002",
     name: "Vila Gastrobar",
     category: "Bar e gastronomia",
     rating: 4.6,
@@ -134,7 +134,7 @@ export const fallbackVenues: Venue[] = [
     vibe: "Drinks, samba e jantar",
   },
   {
-    id: "lagoa-lounge",
+    id: "a1000000-0000-4000-8000-000000000003",
     name: "Lagoa Lounge",
     category: "Lounge e drinks",
     rating: 4.7,
@@ -144,7 +144,7 @@ export const fallbackVenues: Venue[] = [
     vibe: "Lounge, karaokê e encontro",
   },
   {
-    id: "deck-itauna",
+    id: "a1000000-0000-4000-8000-000000000004",
     name: "Deck Itaúna",
     category: "Dança e praia",
     rating: 4.5,
@@ -154,7 +154,7 @@ export const fallbackVenues: Venue[] = [
     vibe: "Forró, pista aberta e orla",
   },
   {
-    id: "wave-club",
+    id: "a1000000-0000-4000-8000-000000000005",
     name: "Wave Club",
     category: "Club e DJs",
     rating: 4.4,

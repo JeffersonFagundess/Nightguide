@@ -76,6 +76,21 @@ export async function syncQueuedActions() {
     if (userError || !user) return;
 
     for (const action of actions) {
+      if (action.type === "review_created" && action.payload.venueId && isUuid(String(action.payload.venueId))) {
+        const reviewResult = await syncReviewAction(supabase, user.id, user.user_metadata, action);
+        if (reviewResult.ok) {
+          await deleteAction(action.id);
+          continue;
+        }
+
+        await updateAction({
+          ...action,
+          attempts: action.attempts + 1,
+          lastError: reviewResult.error,
+        });
+        continue;
+      }
+
       const { error } = await supabase.from("user_activity").upsert(
         {
           user_id: user.id,
@@ -104,6 +119,55 @@ export async function syncQueuedActions() {
     syncing = false;
     emitQueueChange();
   }
+}
+
+async function syncReviewAction(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  userMetadata: Record<string, unknown>,
+  action: QueuedOfflineAction,
+) {
+  const payload = action.payload;
+  let imageUrl = typeof payload.imageUrl === "string" ? payload.imageUrl : null;
+
+  if (typeof payload.imageDataUrl === "string" && payload.imageDataUrl.startsWith("data:")) {
+    const imageBlob = await fetch(payload.imageDataUrl).then((response) => response.blob());
+    const extension = extensionForMime(imageBlob.type || String(payload.imageMimeType || "image/jpeg"));
+    const path = `${userId}/${action.id}.${extension}`;
+    const { error: uploadError } = await supabase.storage.from("review-media").upload(path, imageBlob, {
+      contentType: imageBlob.type || "image/jpeg",
+      upsert: true,
+    });
+    if (uploadError) return { ok: false, error: uploadError.message };
+    imageUrl = supabase.storage.from("review-media").getPublicUrl(path).data.publicUrl;
+  }
+
+  const { error } = await supabase.from("reviews").upsert(
+    {
+      id: action.id,
+      user_id: userId,
+      venue_id: String(payload.venueId),
+      rating: Number(payload.rating || 5),
+      comment: String(payload.comment || ""),
+      image_url: imageUrl,
+      author_name: String(userMetadata.full_name || "NightGuide"),
+      author_avatar_url: typeof userMetadata.avatar_url === "string" ? userMetadata.avatar_url : null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id,venue_id" },
+  );
+
+  return error ? { ok: false, error: error.message } : { ok: true as const };
+}
+
+function extensionForMime(mime: string) {
+  if (mime.includes("png")) return "png";
+  if (mime.includes("webp")) return "webp";
+  return "jpg";
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 export async function getPendingActionCount() {
