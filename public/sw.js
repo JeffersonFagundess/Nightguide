@@ -1,4 +1,4 @@
-const CACHE_NAME = "nightguide-v5";
+const CACHE_NAME = "nightguide-v6";
 const STATIC_ASSETS = [
   "/",
   "/login",
