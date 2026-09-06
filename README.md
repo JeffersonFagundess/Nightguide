@@ -8,7 +8,7 @@ Na branch `native-regression`, a nova base Expo/React Native fica em `apps/mobil
 
 ## Links uteis
 
-- Producao: https://nightguide-saquarema.vercel.app
+- Producao: https://nightguide-modern.vercel.app
 - Schema Supabase: [`supabase/schema.sql`](supabase/schema.sql)
 - Imagens do carrossel: [`public/carousel-source-images`](public/carousel-source-images)
 - Documentacao completa: [`docs`](docs)

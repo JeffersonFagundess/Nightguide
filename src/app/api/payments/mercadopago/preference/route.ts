@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Esse ingresso nao precisa de pagamento." }, { status: 400 });
     }
 
-    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://nightguide-saquarema.vercel.app").replace(/\/$/, "");
+    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://nightguide-modern.vercel.app").replace(/\/$/, "");
     const ticketUrl = `${siteUrl}/ingressos/${event.id}`;
     console.info("[NightGuide][MercadoPago][preference:start]", {
       debugId,
