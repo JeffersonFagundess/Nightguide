@@ -8,7 +8,7 @@ import { Carousel } from "@/components/carousel";
 import { VenueMap } from "@/components/venue-map";
 import { getClientUserScope, scopedStorageKey } from "@/lib/client-user-scope";
 import { localizeEvent, localizeVenue } from "@/lib/event-copy";
-import { queueOfflineAction } from "@/lib/offline-sync";
+import { getCachedReviewMedia, queueOfflineAction } from "@/lib/offline-sync";
 import { copy, usePreferences } from "@/lib/preferences";
 import { createClient } from "@/lib/supabase/browser";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
@@ -372,10 +372,10 @@ function EventDetails({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-[9999] grid place-items-end bg-black/70 p-3 backdrop-blur-sm sm:place-items-center sm:p-6">
-      <article className="max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-[8px] border border-white/10 bg-[color:var(--panel)] shadow-2xl shadow-black/50">
+    <div className="fixed inset-0 z-[9999] grid place-items-end overflow-y-auto overscroll-contain bg-black/70 p-3 backdrop-blur-sm sm:place-items-center sm:p-6">
+      <article className="max-h-[calc(100dvh-1.5rem)] w-full max-w-5xl overflow-y-auto overscroll-contain rounded-[8px] border border-white/10 bg-[color:var(--panel)] shadow-2xl shadow-black/50 sm:max-h-[calc(100dvh-3rem)]">
         <div
-          className="relative h-48 bg-cover bg-center sm:h-60"
+          className="relative h-40 shrink-0 bg-cover bg-center sm:h-44 lg:h-48"
           data-image-surface
           style={{ backgroundImage: `url(${event.image})` }}
         >
@@ -393,7 +393,7 @@ function EventDetails({
           </div>
         </div>
 
-        <div className="max-h-[calc(92vh-12rem)] overflow-y-auto p-4 sm:p-6">
+        <div className="p-4 sm:p-6">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Detail label={labels.when} value={`${event.date} às ${event.time}`} />
             <Detail label={labels.venue} value={event.venue} />
@@ -456,20 +456,19 @@ function VenueDetails({ venue, labels, onClose }: { venue: Venue; labels: (typeo
       try {
         const cached = readReviews(cacheKey);
         const scope = await getClientUserScope();
-        const localFeedbacks = readLocalFeedbacks(scopedStorageKey("nightguide-feedbacks", scope.storageScope)).flatMap((item) => {
-          if (item.venue !== venue.name) return [];
-          return [{
-            ...item,
-            id: item.id,
-            user_id: scope.userId || undefined,
-            rating: Number(item.rating || 5),
-            comment: item.comment || item.text || "",
-            image_url: item.imageUrl || null,
-            image_data_url: item.imageDataUrl || null,
-            author_name: scope.userId ? "Você" : "NightGuide",
-            created_at: item.createdAt || new Date().toISOString(),
-          } satisfies CommunityReview];
-        });
+        const storedFeedbacks = readLocalFeedbacks(scopedStorageKey("nightguide-feedbacks", scope.storageScope))
+          .filter((item) => item.venue === venue.name);
+        const localFeedbacks = await Promise.all(storedFeedbacks.map(async (item) => ({
+          ...item,
+          id: item.id,
+          user_id: scope.userId || undefined,
+          rating: Number(item.rating || 5),
+          comment: item.comment || item.text || "",
+          image_url: item.imageUrl || null,
+          image_data_url: item.imageDataUrl || await getCachedReviewMedia(item.id).catch(() => undefined) || null,
+          author_name: scope.userId ? "Você" : "NightGuide",
+          created_at: item.createdAt || new Date().toISOString(),
+        } satisfies CommunityReview)));
 
         if (cached.length) setReviews(mergeReviews(cached, localFeedbacks));
         else if (localFeedbacks.length) setReviews(localFeedbacks);
@@ -514,8 +513,8 @@ function VenueDetails({ venue, labels, onClose }: { venue: Venue; labels: (typeo
   }, [venue.id]);
 
   return (
-    <div className="fixed inset-0 z-[9999] grid place-items-end bg-black/70 p-3 backdrop-blur-sm sm:place-items-center sm:p-6">
-      <article className="w-full max-w-xl rounded-[8px] border border-white/10 bg-[color:var(--panel)] p-5 shadow-2xl shadow-black/50">
+    <div className="fixed inset-0 z-[9999] grid place-items-end overflow-y-auto overscroll-contain bg-black/70 p-3 backdrop-blur-sm sm:place-items-center sm:p-6">
+      <article className="max-h-[calc(100dvh-1.5rem)] w-full max-w-xl overflow-y-auto overscroll-contain rounded-[8px] border border-white/10 bg-[color:var(--panel)] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl shadow-black/50 sm:max-h-[calc(100dvh-3rem)]">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[color:var(--accent)]">{venue.category}</p>
@@ -604,7 +603,10 @@ function readLocalFeedbacks(key: string): LocalFeedback[] {
 
 function writeReviews(key: string, reviews: CommunityReview[]) {
   try {
-    window.localStorage.setItem(key, JSON.stringify(reviews));
+    window.localStorage.setItem(
+      key,
+      JSON.stringify(reviews.map((review) => ({ ...review, image_data_url: undefined }))),
+    );
   } catch {
     // A full cache must never hide the remote feed.
   }

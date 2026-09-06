@@ -3,8 +3,9 @@
 import { createClient } from "@/lib/supabase/browser";
 
 const dbName = "nightguide-offline";
-const dbVersion = 1;
+const dbVersion = 2;
 const storeName = "actions";
+const reviewMediaStoreName = "review-media";
 const syncEventName = "nightguide-sync-change";
 
 export type OfflineActionType =
@@ -187,6 +188,32 @@ export async function getQueuedActions() {
   });
 }
 
+export async function cacheReviewMedia(reviewId: string, dataUrl: string) {
+  if (typeof window === "undefined") return;
+  const db = await openQueue();
+
+  await new Promise<void>((resolve, reject) => {
+    const request = db.transaction(reviewMediaStoreName, "readwrite").objectStore(reviewMediaStoreName).put({
+      id: reviewId,
+      dataUrl,
+      updatedAt: new Date().toISOString(),
+    });
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function getCachedReviewMedia(reviewId: string) {
+  if (typeof window === "undefined") return undefined;
+  const db = await openQueue();
+
+  return new Promise<string | undefined>((resolve, reject) => {
+    const request = db.transaction(reviewMediaStoreName, "readonly").objectStore(reviewMediaStoreName).get(reviewId);
+    request.onsuccess = () => resolve((request.result as { dataUrl?: string } | undefined)?.dataUrl);
+    request.onerror = () => reject(request.error);
+  });
+}
+
 export function onQueueChange(listener: () => void) {
   window.addEventListener(syncEventName, listener);
   return () => window.removeEventListener(syncEventName, listener);
@@ -209,6 +236,9 @@ function openQueue() {
         const db = request.result;
         if (!db.objectStoreNames.contains(storeName)) {
           db.createObjectStore(storeName, { keyPath: "id" });
+        }
+        if (!db.objectStoreNames.contains(reviewMediaStoreName)) {
+          db.createObjectStore(reviewMediaStoreName, { keyPath: "id" });
         }
       };
 

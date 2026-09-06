@@ -6,7 +6,7 @@ import { BarChart3, CalendarDays, Camera, CreditCard, Heart, Image as ImageIcon,
 import type { DemoRole } from "@/lib/demo-session";
 import { getClientUserScope, scopedStorageKey } from "@/lib/client-user-scope";
 import { formatBRL, ticketsStorageBaseKey, type FakeTicket } from "@/lib/fake-tickets";
-import { queueOfflineAction } from "@/lib/offline-sync";
+import { cacheReviewMedia, getCachedReviewMedia, queueOfflineAction } from "@/lib/offline-sync";
 import type { FeaturedEvent, Venue } from "@/lib/types";
 
 type Props = {
@@ -76,7 +76,14 @@ function GuestPanel({ name, email, events, venues }: { name: string; email: stri
       setUserId(scope.userId);
       setSavedIds(JSON.parse(localStorage.getItem(nextSavedKey) || "[]") as string[]);
       setTickets(JSON.parse(localStorage.getItem(nextTicketKey) || "[]") as FakeTicket[]);
-      setFeedbacks(JSON.parse(localStorage.getItem(nextFeedbackKey) || "[]") as Feedback[]);
+      const storedFeedbacks = JSON.parse(localStorage.getItem(nextFeedbackKey) || "[]") as Feedback[];
+      const hydratedFeedbacks = await Promise.all(
+        storedFeedbacks.map(async (feedback) => ({
+          ...feedback,
+          imageDataUrl: feedback.imageDataUrl || await getCachedReviewMedia(feedback.id).catch(() => undefined),
+        })),
+      );
+      if (active) setFeedbacks(hydratedFeedbacks);
     }
 
     void loadUserData();
@@ -113,25 +120,34 @@ function GuestPanel({ name, email, events, venues }: { name: string; email: stri
     };
     const next = [feedback, ...feedbacks];
     setFeedbacks(next);
-    localStorage.setItem(feedbackKey, JSON.stringify(next));
-    await queueOfflineAction({
-      id: feedback.id,
-      type: "review_created",
-      entityType: "review",
-      entityId: selectedVenue?.id ?? venue,
-      payload: {
-        venueId: selectedVenue?.id,
-        venueName: venue,
-        rating: Number(rating),
-        comment: feedback.text,
-        imageDataUrl: photoDataUrl || undefined,
-        imageName: photoName || undefined,
-      },
-    });
-    setComment("");
-    setPhotoDataUrl(null);
-    setPhotoName("");
-    setSavingFeedback(false);
+    try {
+      if (photoDataUrl) await cacheReviewMedia(feedback.id, photoDataUrl);
+      localStorage.setItem(
+        feedbackKey,
+        JSON.stringify(next.map((item) => ({ ...item, imageDataUrl: undefined }))),
+      );
+      await queueOfflineAction({
+        id: feedback.id,
+        type: "review_created",
+        entityType: "review",
+        entityId: selectedVenue?.id ?? venue,
+        payload: {
+          venueId: selectedVenue?.id,
+          venueName: venue,
+          rating: Number(rating),
+          comment: feedback.text,
+          imageDataUrl: photoDataUrl || undefined,
+          imageName: photoName || undefined,
+        },
+      });
+      setComment("");
+      setPhotoDataUrl(null);
+      setPhotoName("");
+    } catch {
+      window.alert("Não foi possível salvar a publicação. Tente novamente.");
+    } finally {
+      setSavingFeedback(false);
+    }
   }
 
   async function choosePhoto(file: File | undefined) {
