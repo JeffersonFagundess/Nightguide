@@ -67,7 +67,7 @@ Para gerar um APK pelo EAS, faça login uma vez e use:
 pnpm build:apk
 ```
 
-O repositório também gera um APK standalone automaticamente no workflow **Build Android APK**. O arquivo aparece como artefato `NightGuide-Android-APK` na execução do GitHub Actions.
+O repositório também gera um APK standalone automaticamente no workflow **Build Android APK**. Depois da validação, o APK é publicado em **Releases** para instalação; o mesmo arquivo aparece como artefato `NightGuide-Android-APK` na execução do GitHub Actions.
 
 Para build de producao:
 
