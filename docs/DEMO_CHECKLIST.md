@@ -4,11 +4,13 @@ Este roteiro cobre os oito itens exigidos para a apresentação do NightGuide.
 
 ## 1. Aplicativo executando
 
-1. Instale o arquivo `NightGuide.apk` no Android.
+1. Instale o arquivo `NightGuide-1.0.0-arm64.apk` no Android ARM64.
 2. Abra o aplicativo e mostre as abas Descobrir, Mapa, Ingressos e Conta.
 3. Entre com uma conta normal de e-mail e senha.
 
 O APK é independente do Metro/Expo Go e pode ser executado diretamente no aparelho.
+
+Esta compilação é destinada a aparelhos ARM64; não inclui suporte a aparelhos Android de 32 bits nem emuladores x86. O sucesso do build confirma a geração do instalador, mas a demonstração abaixo deve ser validada no aparelho antes da apresentação.
 
 ## 2. Funcionalidades principais
 
@@ -79,4 +81,3 @@ Para baixar manualmente:
 4. Extraia o ZIP e instale `app-release.apk`.
 
 Também é possível gerar pelo EAS com `pnpm build:apk`, após executar `eas login` uma vez.
-
