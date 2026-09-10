@@ -12,8 +12,10 @@ import { getDemoReviews } from '@/src/data/demo-reviews';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useNightData } from '@/src/providers/data-provider';
 import { useUserData } from '@/src/providers/user-data-provider';
+import { usePreferences } from '@/src/providers/preferences-provider';
 import { colors } from '@/src/theme';
 import type { Review } from '@/src/types';
+import { localizeVenueCategory, localizeVenueDescription } from '@/src/lib/i18n';
 
 export default function VenueProfileScreen() {
   const params = useLocalSearchParams<{ id: string }>();
@@ -21,15 +23,18 @@ export default function VenueProfileScreen() {
   const { venues } = useNightData();
   const { user, profile } = useAuth();
   const { reviews: localReviews } = useUserData();
+  const { language } = usePreferences();
+  const t = venueCopy[language];
   const venue = venues.find((item) => item.id === venueId);
   const [remoteReviews, setRemoteReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(5);
 
   const loadReviews = useCallback(async (manual = false) => {
     if (!venueId) return;
     if (manual) setRefreshing(true);
-    const cacheKey = `nightguide:venue-reviews:v1:${venueId}`;
+    const cacheKey = `nightguide:venue-reviews:v2:${venueId}`;
     const demoReviews = getDemoReviews(venue?.name);
 
     try {
@@ -71,6 +76,7 @@ export default function VenueProfileScreen() {
   }, [venue?.name, venueId]);
 
   useEffect(() => {
+    setVisibleCount(5);
     void loadReviews();
   }, [loadReviews]);
 
@@ -81,42 +87,43 @@ export default function VenueProfileScreen() {
     const otherRemote = remoteReviews.filter((review) => !ownLocal.some(local => local.id === review.id || (local.userId === review.userId && local.venueId === review.venueId)));
     return [...ownLocal, ...otherRemote].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }, [localReviews, profile?.fullName, remoteReviews, user, venueId]);
+  const visiblePublications = publications.slice(0, visibleCount);
 
   if (!venue) {
-    return <Screen contentStyle={styles.center}><EmptyState title="Local não encontrado" text="Esse estabelecimento não está disponível no momento." action={{ label: 'Voltar ao mapa', onPress: () => router.back() }} /></Screen>;
+    return <Screen contentStyle={styles.center}><EmptyState title={t.notFound} text={t.notFoundText} action={{ label: t.back, onPress: () => router.back() }} /></Screen>;
   }
 
   return (
     <Screen>
-      {venue.coverUrl ? <Image source={{ uri: venue.coverUrl }} resizeMode="cover" style={styles.cover} /> : <View style={styles.coverFallback}><MapPin size={36} color={colors.accent} /></View>}
-      <Text style={styles.eyebrow}>PERFIL DO ESTABELECIMENTO</Text>
-      {venue.photoCredit ? <Text style={styles.meta} onPress={() => { if (venue.photoSource) void Linking.openURL(venue.photoSource).catch(() => undefined); }}>{venue.photoCredit} · Ver fonte</Text> : null}
-      {venue.photoIllustrative === false ? <Text style={styles.meta} onPress={() => void Linking.openURL('https://creativecommons.org/licenses/by-sa/3.0/').catch(() => undefined)}>Foto histórica sem edição · Licença CC BY-SA 3.0</Text> : null}
+      {venue.coverAsset || venue.coverUrl ? <Image source={venue.coverAsset || { uri: venue.coverUrl }} resizeMode="cover" style={styles.cover} /> : <View style={styles.coverFallback}><MapPin size={36} color={colors.accent} /></View>}
+      <Text style={styles.eyebrow}>{t.profile}</Text>
+      {venue.photoCredit ? <Text style={styles.meta} onPress={() => { if (venue.photoSource) void Linking.openURL(venue.photoSource).catch(() => undefined); }}>{venue.photoCredit} · {t.source}</Text> : null}
+      {venue.photoIllustrative === false ? <Text style={styles.meta} onPress={() => void Linking.openURL('https://creativecommons.org/licenses/by-sa/3.0/').catch(() => undefined)}>{t.historicalPhoto}</Text> : null}
       <Text style={styles.title}>{venue.name}</Text>
       <View style={styles.metaRow}>
         <MapPin size={15} color={colors.accent} />
-        <Text style={styles.meta}>{venue.category} • {venue.address}</Text>
+        <Text style={styles.meta}>{localizeVenueCategory(venue.category, language)} • {venue.address}</Text>
       </View>
-      <Text style={styles.description}>{venue.vibe}</Text>
+      <Text style={styles.description}>{localizeVenueDescription(venue.vibe, venue.category, language)}</Text>
       <View style={styles.scoreCard}>
         <Star size={20} color={colors.accent} fill={colors.accent} />
         <Text style={styles.score}>{venue.rating.toFixed(1)}</Text>
-        <Text style={styles.scoreLabel}>{publications.length} {publications.length === 1 ? 'publicação' : 'publicações'}</Text>
+        <Text style={styles.scoreLabel}>{publications.length} {publications.length === 1 ? t.post : t.posts}</Text>
       </View>
 
       <View style={styles.sectionHeading}>
         <View>
-          <Text style={styles.sectionEyebrow}>COMUNIDADE</Text>
-          <Text style={styles.sectionTitle}>O que as pessoas publicaram</Text>
+          <Text style={styles.sectionEyebrow}>{t.community}</Text>
+          <Text style={styles.sectionTitle}>{t.peoplePosted}</Text>
         </View>
-        <Pressable accessibilityLabel="Atualizar publicações" disabled={refreshing} onPress={() => void loadReviews(true)} style={styles.refreshButton}>
+        <Pressable accessibilityLabel={t.refresh} disabled={refreshing} onPress={() => void loadReviews(true)} style={styles.refreshButton}>
           <RefreshCw size={18} color={refreshing ? colors.muted : colors.text} />
         </Pressable>
       </View>
 
-      {loading && !publications.length ? <LoadingState label="Carregando publicações…" /> : publications.length ? (
+      {loading && !publications.length ? <LoadingState label={t.loading} /> : publications.length ? (
         <View style={styles.feed}>
-          {publications.map((review) => (
+          {visiblePublications.map((review) => (
             <View key={`${review.userId || 'local'}-${review.id}`} style={styles.post}>
               <View style={styles.postHeader}>
                 {review.authorAvatarUrl ? <Image source={{ uri: review.authorAvatarUrl }} style={styles.avatarImage} /> : <View style={styles.avatar}><UserRound size={19} color={colors.accent} /></View>}
@@ -124,26 +131,38 @@ export default function VenueProfileScreen() {
                   <Text style={styles.author}>{review.authorName || 'NightGuide'}</Text>
                   <Text style={styles.venueLine}>📍 {venue.name}</Text>
                 </View>
-                <Text style={styles.date}>{new Date(review.createdAt).toLocaleDateString('pt-BR')}</Text>
+                <Text style={styles.date}>{new Date(review.createdAt).toLocaleDateString(language === 'pt' ? 'pt-BR' : 'en-US')}</Text>
               </View>
               <Text style={styles.postDescription}>{review.comment}</Text>
-              {review.photoUri || review.photoUrl ? <Image source={{ uri: review.photoUri || review.photoUrl }} resizeMode="contain" style={styles.postImage} /> : null}
+              {review.photoAsset || review.photoUri || review.photoUrl ? <Image source={review.photoAsset || { uri: review.photoUri || review.photoUrl }} resizeMode="cover" style={styles.postImage} /> : null}
               <View style={styles.postFooter}>
                 <View style={styles.footerLeft}>
                   <Text style={styles.rating}>{'★'.repeat(review.rating)}<Text style={styles.ratingMuted}>{'★'.repeat(5 - review.rating)}</Text></Text>
-                  {review.isDemo ? <Text style={styles.exampleLabel}>DEMONSTRAÇÃO · FOTO ILUSTRATIVA, NÃO É DO LOCAL</Text> : null}
+                  {review.isDemo ? <Text style={styles.exampleLabel}>{t.demoPhoto}</Text> : null}
                 </View>
               </View>
             </View>
           ))}
+          {publications.length > 5 ? (
+            <Pressable
+              accessibilityRole="button"
+              style={styles.moreButton}
+              onPress={() => setVisibleCount(current => current < publications.length ? Math.min(current + 5, publications.length) : 5)}>
+              <Text style={styles.moreButtonText}>
+                {visibleCount < publications.length
+                  ? `${t.moreReviews} (${Math.min(5, publications.length - visibleCount)})`
+                  : t.onlyFive}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : (
         <EmptyState
           icon={MessageSquare}
-          title="Ainda não há publicações"
-          text="Seja a primeira pessoa a contar como foi a experiência neste local."
+          title={t.noPosts}
+          text={t.noPostsText}
           action={{
-            label: user ? 'Criar publicação' : 'Entrar para publicar',
+            label: user ? t.createPost : t.signInPost,
             onPress: () => user
               ? router.push({ pathname: '/(tabs)/account', params: { venueId } })
               : router.push({ pathname: '/auth/login', params: { next: `/venue/${venueId}` } }),
@@ -151,7 +170,7 @@ export default function VenueProfileScreen() {
         />
       )}
       <Button
-        label={user ? 'Publicar comentário com foto' : 'Entrar para publicar'}
+        label={user ? t.publishPhoto : t.signInPost}
         icon={MessageSquare}
         onPress={() => user
           ? router.push({ pathname: '/(tabs)/account', params: { venueId } })
@@ -161,6 +180,11 @@ export default function VenueProfileScreen() {
     </Screen>
   );
 }
+
+const venueCopy = {
+  pt: { notFound: 'Local não encontrado', notFoundText: 'Esse estabelecimento não está disponível no momento.', back: 'Voltar ao mapa', profile: 'PERFIL DO ESTABELECIMENTO', source: 'Ver fonte', historicalPhoto: 'Foto histórica sem edição · Licença CC BY-SA 3.0', post: 'publicação', posts: 'publicações', community: 'COMUNIDADE', peoplePosted: 'O que as pessoas publicaram', refresh: 'Atualizar publicações', loading: 'Carregando publicações…', demoPhoto: 'DEMONSTRAÇÃO · FOTO ILUSTRATIVA, NÃO É DO LOCAL', noPosts: 'Ainda não há publicações', noPostsText: 'Seja a primeira pessoa a contar como foi a experiência neste local.', createPost: 'Criar publicação', signInPost: 'Entrar para publicar', publishPhoto: 'Publicar comentário com foto', moreReviews: 'Ver mais avaliações', onlyFive: 'Mostrar apenas 5' },
+  en: { notFound: 'Venue not found', notFoundText: 'This venue is not available right now.', back: 'Back to map', profile: 'VENUE PROFILE', source: 'View source', historicalPhoto: 'Unedited historical photo · CC BY-SA 3.0 license', post: 'post', posts: 'posts', community: 'COMMUNITY', peoplePosted: 'What visitors posted', refresh: 'Refresh posts', loading: 'Loading posts…', demoPhoto: 'DEMO · ILLUSTRATIVE PHOTO, NOT THIS VENUE', noPosts: 'No posts yet', noPostsText: 'Be the first person to share an experience at this venue.', createPost: 'Create post', signInPost: 'Sign in to post', publishPhoto: 'Post a review with photo', moreReviews: 'See more reviews', onlyFive: 'Show only 5' },
+} as const;
 
 const styles = StyleSheet.create({
   center: { flexGrow: 1, justifyContent: 'center' },
@@ -195,4 +219,6 @@ const styles = StyleSheet.create({
   ratingMuted: { color: colors.border },
   exampleLabel: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
   publishButton: { marginTop: 18 },
+  moreButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 15, borderWidth: 1, borderColor: colors.accent, backgroundColor: 'rgba(226,255,84,0.08)' },
+  moreButtonText: { color: colors.accent, fontSize: 13, fontWeight: '900' },
 });

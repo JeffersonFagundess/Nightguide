@@ -22,6 +22,8 @@ node_modules/
 **/.expo/
 /apps/mobile/dist/
 /apps/mobile/dist-test/
+/apps/mobile/android/
+/apps/mobile/expo-env.d.ts
 
 # misc
 .DS_Store

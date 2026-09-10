@@ -23,6 +23,7 @@ export function CommunityFeed() {
   const [remote, setRemote] = useState<Review[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(5);
   const demoPosts = useMemo(() => venues.slice(0, 4).flatMap(venue => getDemoReviews(venue.name)), [venues]);
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -59,21 +60,35 @@ export function CommunityFeed() {
       .filter(review => venues.some(venue => venue.id === review.venueId) && !review.isDemo)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }, [local, remote, user, profile?.fullName, venues]);
+  const allPosts = useMemo(() => [...posts, ...demoPosts], [demoPosts, posts]);
+  const visiblePosts = allPosts.slice(0, visibleCount);
   return <View style={styles.section}>
     <Text style={styles.heading}>{pt ? 'Avaliações da comunidade' : 'Community reviews'}</Text>
     <Text style={styles.hint}>{pt ? 'Fotos e experiências de quem visitou. Visível também sem login.' : 'Photos and experiences from visitors. No login needed to read.'}</Text>
     {loading ? <Text style={styles.hint}>{pt ? 'Atualizando avaliações…' : 'Updating reviews…'}</Text> : null}
     {error ? <Text style={styles.hint}>{pt ? 'Sem atualização agora. Mostrando o conteúdo salvo neste aparelho.' : 'Unable to update. Showing content saved on this device.'}</Text> : null}
     {!posts.length && !loading ? <Text style={styles.hint}>{pt ? 'Ainda não há avaliações nestes locais. Abra um perfil para publicar a primeira.' : 'No reviews yet. Open a venue to share the first one.'}</Text> : null}
-    {[...posts.slice(0, 20), ...demoPosts].map(review => <Pressable key={`${review.userId}-${review.id}`} style={styles.post}
+    {visiblePosts.map(review => <Pressable key={`${review.userId}-${review.id}`} style={styles.post}
       accessibilityRole="button" onPress={() => router.push({ pathname: '/venue/[id]', params: { id: review.venueId } })}>
       <Text style={styles.author}>{review.authorName}</Text>
       {review.isDemo ? <Text style={styles.stars}>{pt ? 'DEMONSTRAÇÃO · FOTO ILUSTRATIVA, NÃO É DO LOCAL' : 'DEMO · ILLUSTRATIVE PHOTO, NOT THIS VENUE'}</Text> : null}
       <Text style={styles.hint}>📍 {venues.find(venue => venue.id === review.venueId)?.name}</Text>
       <Text style={styles.comment}>{review.comment}</Text>
-      {review.photoUri || review.photoUrl ? <Image source={{ uri: review.photoUri || review.photoUrl }} resizeMode="contain" style={styles.photo} /> : null}
+      {review.photoAsset || review.photoUri || review.photoUrl ? <Image source={review.photoAsset || { uri: review.photoUri || review.photoUrl }} resizeMode="cover" style={styles.photo} /> : null}
       <Text style={styles.stars}>{'★'.repeat(Math.max(0, Math.min(5, Math.round(review.rating))))} · {new Date(review.createdAt).toLocaleDateString(pt ? 'pt-BR' : 'en-US')}</Text>
     </Pressable>)}
+    {allPosts.length > 5 ? (
+      <Pressable
+        accessibilityRole="button"
+        style={styles.moreButton}
+        onPress={() => setVisibleCount(current => current < allPosts.length ? Math.min(current + 5, allPosts.length) : 5)}>
+        <Text style={styles.moreButtonText}>
+          {visibleCount < allPosts.length
+            ? `${pt ? 'Ver mais avaliações' : 'See more reviews'} (${Math.min(5, allPosts.length - visibleCount)})`
+            : (pt ? 'Mostrar apenas 5' : 'Show only 5')}
+        </Text>
+      </Pressable>
+    ) : null}
   </View>;
 }
 const styles = StyleSheet.create({
@@ -83,6 +98,8 @@ const styles = StyleSheet.create({
   post: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, borderRadius: 18, padding: 16, gap: 9 },
   author: { color: colors.text, fontSize: 16, fontWeight: '800' },
   comment: { color: colors.text, lineHeight: 23, fontSize: 15 },
-  photo: { width: '100%', aspectRatio: 1, backgroundColor: colors.background, borderRadius: 12 },
+  photo: { width: '100%', aspectRatio: 4 / 3, backgroundColor: colors.background, borderRadius: 12 },
   stars: { color: colors.accent, fontSize: 13 },
+  moreButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 15, borderWidth: 1, borderColor: colors.accent, backgroundColor: 'rgba(226,255,84,0.08)' },
+  moreButtonText: { color: colors.accent, fontSize: 13, fontWeight: '900' },
 });

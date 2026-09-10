@@ -4,21 +4,25 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '@/src/theme';
 import type { NightEvent } from '@/src/types';
+import { usePreferences } from '@/src/providers/preferences-provider';
+import { localizeEventText } from '@/src/lib/i18n';
 
 type Props = {
   event: NightEvent;
   saved: boolean;
   onToggleSaved: () => void;
   featured?: boolean;
+  featuredWidth?: number;
 };
 
-export function EventCard({ event, saved, onToggleSaved, featured = false }: Props) {
+export function EventCard({ event, saved, onToggleSaved, featured = false, featuredWidth }: Props) {
+  const { language } = usePreferences();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Abrir ${event.title}`}
       onPress={() => router.push({ pathname: '/event/[id]', params: { id: event.id } })}
-      style={({ pressed }) => [styles.card, featured && styles.featured, pressed && styles.pressed]}>
+      style={({ pressed }) => [styles.card, featured && styles.featured, featured && featuredWidth ? { width: featuredWidth } : null, pressed && styles.pressed]}>
       <Image source={{ uri: event.image }} style={[styles.image, featured && styles.imageFeatured]} />
       <View style={styles.overlay} />
       <Pressable
@@ -33,7 +37,7 @@ export function EventCard({ event, saved, onToggleSaved, featured = false }: Pro
         <Heart size={19} color={saved ? colors.ink : colors.text} fill={saved ? colors.ink : 'transparent'} />
       </Pressable>
       <View style={styles.content}>
-        <View style={styles.badge}><Text style={styles.badgeText}>{event.genre}</Text></View>
+        <View style={styles.badge}><Text style={styles.badgeText}>{localizeEventText(event.genre, language)}</Text></View>
         <Text style={[styles.title, featured && styles.titleFeatured]} numberOfLines={2}>{event.title}</Text>
         <View style={styles.metaRow}>
           <MapPin size={14} color={colors.muted} />
@@ -42,9 +46,9 @@ export function EventCard({ event, saved, onToggleSaved, featured = false }: Pro
         <View style={styles.bottomRow}>
           <View style={styles.metaRow}>
             <CalendarDays size={14} color={colors.accent} />
-            <Text style={styles.date}>{event.date} • {event.time}</Text>
+            <Text style={styles.date}>{localizeEventText(event.date, language)} • {event.time}</Text>
           </View>
-          <Text style={styles.price}>{event.price}</Text>
+          <Text style={styles.price}>{localizeEventText(event.price, language)}</Text>
         </View>
       </View>
     </Pressable>
@@ -53,7 +57,7 @@ export function EventCard({ event, saved, onToggleSaved, featured = false }: Pro
 
 const styles = StyleSheet.create({
   card: { minHeight: 300, overflow: 'hidden', borderRadius: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  featured: { width: 300, minHeight: 390, marginRight: 14 },
+  featured: { minHeight: 390, marginRight: 18 },
   image: { position: 'absolute', inset: 0, width: '100%', height: '100%' },
   imageFeatured: { height: '100%' },
   overlay: { position: 'absolute', inset: 0, backgroundColor: 'rgba(5,5,7,0.35)' },

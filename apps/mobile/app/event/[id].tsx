@@ -1,25 +1,30 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { CalendarDays, Heart, MapPin, Navigation, Share2, Sparkles, Ticket } from 'lucide-react-native';
-import { Image, Linking, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/src/components/button';
 import { Screen } from '@/src/components/screen';
 import { EmptyState } from '@/src/components/state';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useNightData } from '@/src/providers/data-provider';
+import { openExactDirections } from '@/src/lib/maps';
 import { useUserData } from '@/src/providers/user-data-provider';
+import { usePreferences } from '@/src/providers/preferences-provider';
 import { colors } from '@/src/theme';
+import { localizeEventText } from '@/src/lib/i18n';
 
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { getEvent, venues } = useNightData();
   const { user } = useAuth();
   const { favoriteIds, toggleFavorite } = useUserData();
+  const { language } = usePreferences();
+  const t = eventCopy[language];
   const event = getEvent(id);
   const venue = event ? venues.find((item) => item.id === event.venueId || item.name === event.venue) : undefined;
 
   if (!event) {
-    return <Screen contentStyle={styles.missing}><EmptyState title="Evento não encontrado" text="Ele pode ter sido removido ou ainda não está disponível offline." action={{ label: 'Voltar', onPress: () => router.back() }} /></Screen>;
+    return <Screen contentStyle={styles.missing}><EmptyState title={t.notFound} text={t.notFoundText} action={{ label: t.back, onPress: () => router.back() }} /></Screen>;
   }
 
   const saved = favoriteIds.includes(event.id);
@@ -27,13 +32,13 @@ export default function EventDetailScreen() {
   async function shareEvent() {
     await Share.share({
       title: event!.title,
-      message: `${event!.title} — ${event!.date} às ${event!.time}, em ${event!.venue}. Veja no NightGuide: nightguide://event/${event!.id}`,
+      message: `${event!.title} — ${event!.date} ${language === 'pt' ? 'às' : 'at'} ${event!.time}, ${language === 'pt' ? 'em' : 'at'} ${event!.venue}. ${t.seeNightGuide}: nightguide://event/${event!.id}`,
     });
   }
 
   async function openRoute() {
     if (event?.latitude == null || event.longitude == null) return;
-    await Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${event.latitude},${event.longitude}`);
+    await openExactDirections({ latitude: event.latitude, longitude: event.longitude });
   }
 
   function buy() {
@@ -51,40 +56,45 @@ export default function EventDetailScreen() {
         <Image source={{ uri: event.image }} style={StyleSheet.absoluteFill} />
         <View style={styles.overlay} />
         <View style={styles.heroActions}>
-          <Pressable onPress={() => void toggleFavorite(event)} style={[styles.iconButton, saved && styles.saved]} accessibilityLabel="Salvar evento">
+          <Pressable onPress={() => void toggleFavorite(event)} style={[styles.iconButton, saved && styles.saved]} accessibilityLabel={t.save}>
             <Heart size={21} color={saved ? colors.ink : colors.text} fill={saved ? colors.ink : 'transparent'} />
           </Pressable>
-          <Pressable onPress={() => void shareEvent()} style={styles.iconButton} accessibilityLabel="Compartilhar evento"><Share2 size={21} color={colors.text} /></Pressable>
+          <Pressable onPress={() => void shareEvent()} style={styles.iconButton} accessibilityLabel={t.share}><Share2 size={21} color={colors.text} /></Pressable>
         </View>
         <View style={styles.heroCopy}>
-          <View style={styles.badge}><Text style={styles.badgeText}>{event.genre}</Text></View>
+          <View style={styles.badge}><Text style={styles.badgeText}>{localizeEventText(event.genre, language)}</Text></View>
           <Text style={styles.title}>{event.title}</Text>
           <Pressable
             accessibilityRole={venue ? 'button' : undefined}
             disabled={!venue}
             onPress={() => venue && router.push({ pathname: '/venue/[id]', params: { id: venue.id } })}
             style={styles.venueRow}>
-            <MapPin size={16} color={colors.accent} /><Text style={styles.venue}>{event.venue}{venue ? ' • ver perfil' : ''}</Text>
+            <MapPin size={16} color={colors.accent} /><Text style={styles.venue}>{event.venue}{venue ? ` • ${t.viewProfile}` : ''}</Text>
           </Pressable>
         </View>
       </View>
 
       <View style={styles.infoGrid}>
-        <Info icon={CalendarDays} label="QUANDO" value={`${event.date}\n${event.time}`} />
-        <Info icon={Ticket} label="ENTRADA" value={event.price} />
-        <Info icon={Sparkles} label="CLIMA" value={event.mood} />
+        <Info icon={CalendarDays} label={t.when} value={`${localizeEventText(event.date, language)}\n${event.time}`} />
+        <Info icon={Ticket} label={t.entry} value={localizeEventText(event.price, language)} />
+        <Info icon={Sparkles} label={t.mood} value={localizeEventText(event.mood, language)} />
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Sobre o evento</Text>
+        <Text style={styles.sectionTitle}>{t.about}</Text>
         <Text style={styles.description}>{event.highlight}</Text>
       </View>
 
-      {event.latitude != null && event.longitude != null ? <Button label="Como chegar" icon={Navigation} variant="secondary" onPress={() => void openRoute()} /> : null}
-      <Button label={event.price.toLowerCase().includes('grátis') ? 'Gerar ingresso grátis' : `Comprar • ${event.price}`} icon={Ticket} onPress={buy} style={styles.buyButton} />
+      {event.latitude != null && event.longitude != null ? <Button label={t.directions} icon={Navigation} variant="secondary" onPress={() => void openRoute()} /> : null}
+      <Button label={event.price.toLowerCase().includes('grátis') ? t.freeTicket : `${t.buy} • ${localizeEventText(event.price, language)}`} icon={Ticket} onPress={buy} style={styles.buyButton} />
     </Screen>
   );
 }
+
+const eventCopy = {
+  pt: { notFound: 'Evento não encontrado', notFoundText: 'Ele pode ter sido removido ou ainda não está disponível offline.', back: 'Voltar', seeNightGuide: 'Veja no NightGuide', save: 'Salvar evento', share: 'Compartilhar evento', viewProfile: 'ver perfil', when: 'QUANDO', entry: 'ENTRADA', mood: 'CLIMA', about: 'Sobre o evento', directions: 'Como chegar ao ponto exato', freeTicket: 'Gerar ingresso grátis', buy: 'Comprar' },
+  en: { notFound: 'Event not found', notFoundText: 'It may have been removed or may not be available offline yet.', back: 'Back', seeNightGuide: 'View on NightGuide', save: 'Save event', share: 'Share event', viewProfile: 'view profile', when: 'WHEN', entry: 'ENTRY', mood: 'MOOD', about: 'About the event', directions: 'Directions to exact point', freeTicket: 'Get free ticket', buy: 'Buy' },
+} as const;
 
 function Info({ icon: Icon, label, value }: { icon: typeof Ticket; label: string; value: string }) {
   return <View style={styles.info}><Icon size={18} color={colors.accent} /><Text style={styles.infoLabel}>{label}</Text><Text style={styles.infoValue}>{value}</Text></View>;

@@ -37,7 +37,7 @@ const styles = StyleSheet.create({
   secondary: { backgroundColor: colors.elevated, borderWidth: 1, borderColor: colors.border },
   danger: { backgroundColor: 'rgba(255,107,131,0.10)', borderWidth: 1, borderColor: 'rgba(255,107,131,0.32)' },
   ghost: { backgroundColor: 'transparent' },
-  label: { color: colors.text, fontWeight: '800', fontSize: 15 },
+  label: { color: colors.text, fontWeight: '800', fontSize: 15, textAlign: 'center', flexShrink: 1 },
   primaryLabel: { color: colors.ink },
   dangerLabel: { color: colors.rose },
   disabled: { opacity: 0.52 },

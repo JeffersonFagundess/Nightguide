@@ -1,29 +1,33 @@
 import { Search, SlidersHorizontal } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { CommunityFeed } from '@/src/components/community-feed';
 
 import { Brand } from '@/src/components/brand';
 import { EventCard } from '@/src/components/event-card';
 import { LanguageSwitch } from '@/src/components/language-switch';
+import { ThemeSwitch } from '@/src/components/theme-switch';
 import { EmptyState } from '@/src/components/state';
 import { useNightData } from '@/src/providers/data-provider';
 import { usePreferences } from '@/src/providers/preferences-provider';
 import { useUserData } from '@/src/providers/user-data-provider';
 import { colors } from '@/src/theme';
 import type { NightEvent } from '@/src/types';
+import { localizeVenueCategory } from '@/src/lib/i18n';
 
-const filters = ['Tudo', 'Grátis', 'Ao vivo', 'Praia', 'Perto'] as const;
+const filters = ['all', 'free', 'live', 'beach', 'near'] as const;
 type Filter = (typeof filters)[number];
 
 export default function DiscoveryScreen() {
   const { events, venues, refresh, refreshing, source } = useNightData();
   const { favoriteIds, toggleFavorite } = useUserData();
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<Filter>('Tudo');
+  const [filter, setFilter] = useState<Filter>('all');
   const { language } = usePreferences();
+  const { width: windowWidth } = useWindowDimensions();
   const t = copy[language];
+  const featuredCardWidth = Math.max(280, windowWidth - 36);
 
   const visible = useMemo(() => {
     const term = normalize(query);
@@ -41,8 +45,8 @@ export default function DiscoveryScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.accent} />}
         showsVerticalScrollIndicator={false}>
         <View style={styles.topbar}>
-          <Brand />
-          <LanguageSwitch />
+          <Brand compact />
+          <View style={styles.headerControls}><ThemeSwitch /><LanguageSwitch /></View>
         </View>
 
         <Text style={styles.eyebrow}>{t.eyebrow}</Text>
@@ -65,22 +69,29 @@ export default function DiscoveryScreen() {
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
           {filters.map((item) => (
-            <Text key={item} onPress={() => setFilter(item)} style={[styles.filter, filter === item && styles.filterActive]}>{item}</Text>
+            <Text key={item} onPress={() => setFilter(item)} style={[styles.filter, filter === item && styles.filterActive]}>{t.filters[item]}</Text>
           ))}
         </ScrollView>
 
-        {!query && filter === 'Tudo' ? (
+        {!query && filter === 'all' ? (
           <>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>{t.featured}</Text>
               <Text style={styles.source}>{source === 'supabase' ? 'AO VIVO' : source === 'cache' ? 'OFFLINE' : 'DEMO'}</Text>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.featuredList}>
+            <ScrollView
+              horizontal
+              decelerationRate="fast"
+              disableIntervalMomentum
+              snapToInterval={featuredCardWidth + 18}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.featuredList}>
               {events.slice(0, 4).map((event) => (
                 <EventCard
                   key={event.id}
                   event={event}
                   featured
+                  featuredWidth={featuredCardWidth}
                   saved={favoriteIds.includes(event.id)}
                   onToggleSaved={() => void toggleFavorite(event)}
                 />
@@ -89,17 +100,17 @@ export default function DiscoveryScreen() {
           </>
         ) : null}
 
-        <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>{language === 'pt' ? 'Explore Saquarema' : 'Explore Saquarema'}</Text></View>
+        <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>{t.explore}</Text></View>
         <View style={styles.eventList}>
           {venues.filter(venue => !query || normalize(`${venue.name} ${venue.category} ${venue.address}`).includes(normalize(query))).map(venue => (
             <Pressable key={venue.id} style={styles.venueCard} accessibilityRole="button"
               onPress={() => router.push({ pathname: '/venue/[id]', params: { id: venue.id } })}>
-              {venue.coverUrl ? <Image source={{ uri: venue.coverUrl }} style={styles.venueImage} /> : <Text style={styles.venueIcon}>📍</Text>}
+              {venue.coverAsset || venue.coverUrl ? <Image source={venue.coverAsset || { uri: venue.coverUrl }} resizeMode="cover" style={styles.venueImage} /> : <Text style={styles.venueIcon}>📍</Text>}
               <View style={{ flex: 1, gap: 5 }}>
                 <Text style={styles.venueName}>{venue.name}</Text>
-                <Text style={styles.subtitleSmall}>{venue.photoIllustrative ? 'Imagem ilustrativa' : venue.photoCredit}</Text>
-                <Text style={styles.subtitleSmall}>{venue.category} · {venue.address}</Text>
-                <Text style={styles.source}>{language === 'pt' ? 'VER PERFIL E AVALIAÇÕES →' : 'PROFILE AND REVIEWS →'}</Text>
+                <Text style={styles.subtitleSmall}>{venue.photoIllustrative ? t.illustrative : venue.photoCredit}</Text>
+                <Text style={styles.subtitleSmall}>{localizeVenueCategory(venue.category, language)} · {venue.address}</Text>
+                <Text style={styles.source}>{t.profile}</Text>
               </View>
             </Pressable>
           ))}
@@ -107,7 +118,7 @@ export default function DiscoveryScreen() {
         <CommunityFeed />
 
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{query || filter !== 'Tudo' ? t.results : t.upcoming}</Text>
+          <Text style={styles.sectionTitle}>{query || filter !== 'all' ? t.results : t.upcoming}</Text>
           <Text style={styles.count}>{visible.length}</Text>
         </View>
         <View style={styles.eventList}>
@@ -138,6 +149,10 @@ const copy = {
     upcoming: 'Próximos eventos',
     emptyTitle: 'Nada por aqui',
     emptyText: 'Tente outro termo ou remova um dos filtros.',
+    explore: 'Explore Saquarema',
+    illustrative: 'Imagem ilustrativa',
+    profile: 'VER PERFIL E AVALIAÇÕES →',
+    filters: { all: 'Tudo', free: 'Grátis', live: 'Ao vivo', beach: 'Praia', near: 'Perto' },
   },
   en: {
     eyebrow: 'YOUR NIGHT STARTS HERE',
@@ -149,6 +164,10 @@ const copy = {
     upcoming: 'Upcoming events',
     emptyTitle: 'Nothing here yet',
     emptyText: 'Try another search or remove a filter.',
+    explore: 'Explore Saquarema',
+    illustrative: 'Illustrative image',
+    profile: 'PROFILE AND REVIEWS →',
+    filters: { all: 'All', free: 'Free', live: 'Live', beach: 'Beach', near: 'Nearby' },
   },
 } as const;
 
@@ -158,10 +177,10 @@ function normalize(value: string) {
 
 function matchesFilter(event: NightEvent, filter: Filter) {
   const text = normalize(`${event.genre} ${event.mood} ${event.venue} ${event.highlight}`);
-  if (filter === 'Grátis') return normalize(event.price).includes('gratis');
-  if (filter === 'Ao vivo') return text.includes('ao vivo') || text.includes('samba') || text.includes('rock');
-  if (filter === 'Praia') return text.includes('praia') || text.includes('orla') || text.includes('mar');
-  if (filter === 'Perto') return /m$/.test(event.distance.trim()) || Number(event.distance.replace(/[^\d,]/g, '').replace(',', '.')) <= 2;
+  if (filter === 'free') return normalize(event.price).includes('gratis');
+  if (filter === 'live') return text.includes('ao vivo') || text.includes('samba') || text.includes('rock');
+  if (filter === 'beach') return text.includes('praia') || text.includes('orla') || text.includes('mar');
+  if (filter === 'near') return /m$/.test(event.distance.trim()) || Number(event.distance.replace(/[^\d,]/g, '').replace(',', '.')) <= 2;
   return true;
 }
 
@@ -172,8 +191,9 @@ const styles = StyleSheet.create({
   venueName: { color: colors.text, fontSize: 18, fontWeight: '800' },
   subtitleSmall: { color: colors.muted, fontSize: 13, lineHeight: 19 },
   screen: { flex: 1, backgroundColor: colors.background },
-  content: { paddingTop: 58, paddingBottom: 34 },
-  topbar: { paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  content: { paddingTop: 58, paddingBottom: 56 },
+  topbar: { paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  headerControls: { alignItems: 'flex-end', gap: 6, flexShrink: 0 },
   eyebrow: { color: colors.accent, fontSize: 12, fontWeight: '900', letterSpacing: 1.5, marginTop: 38, paddingHorizontal: 18 },
   hero: { color: colors.text, fontSize: 39, lineHeight: 42, fontWeight: '900', letterSpacing: -1.5, marginTop: 10, paddingHorizontal: 18 },
   subtitle: { color: colors.muted, fontSize: 16, lineHeight: 23, marginTop: 13, paddingHorizontal: 18, maxWidth: 380 },
@@ -186,6 +206,6 @@ const styles = StyleSheet.create({
   sectionTitle: { color: colors.text, fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
   source: { color: colors.accent, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   count: { color: colors.muted, fontSize: 13, fontWeight: '800' },
-  featuredList: { paddingLeft: 18, paddingRight: 4 },
+  featuredList: { paddingLeft: 18, paddingRight: 18 },
   eventList: { paddingHorizontal: 18, gap: 14 },
 });

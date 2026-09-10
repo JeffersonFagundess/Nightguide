@@ -32,7 +32,7 @@ export default function LoginScreen() {
     try {
       await login(email, password);
       router.dismissAll();
-      router.replace(safeNext(next));
+      router.replace(safeNext(next) as never);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : t.genericError);
     } finally {
@@ -46,7 +46,7 @@ export default function LoginScreen() {
     try {
       await loginWithGoogle();
       router.dismissAll();
-      router.replace(safeNext(next));
+      router.replace(safeNext(next) as never);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : t.genericError);
     } finally {

@@ -1,13 +1,21 @@
+import { DynamicColorIOS, Platform, PlatformColor } from 'react-native';
+
+function adaptive(name: string, light: string, dark: string): string {
+  if (Platform.OS === 'android') return PlatformColor(`@color/${name}`) as unknown as string;
+  if (Platform.OS === 'ios') return DynamicColorIOS({ light, dark }) as unknown as string;
+  return dark;
+}
+
 export const colors = {
-  background: '#09090B',
-  surface: '#141416',
-  elevated: '#1D1D20',
-  border: '#2B2B30',
-  text: '#F7F7F2',
-  muted: '#A7A7AE',
-  accent: '#E2FF54',
-  accentStrong: '#C7E638',
-  ink: '#111207',
+  background: adaptive('nightguide_background', '#F5F6F0', '#09090B'),
+  surface: adaptive('nightguide_surface', '#FFFFFF', '#141416'),
+  elevated: adaptive('nightguide_elevated', '#E9ECE3', '#1D1D20'),
+  border: adaptive('nightguide_border', '#D2D6CC', '#2B2B30'),
+  text: adaptive('nightguide_text', '#171A14', '#F7F7F2'),
+  muted: adaptive('nightguide_muted', '#62685E', '#A7A7AE'),
+  accent: adaptive('nightguide_accent', '#667900', '#E2FF54'),
+  accentStrong: adaptive('nightguide_accent_strong', '#4F6000', '#C7E638'),
+  ink: adaptive('nightguide_ink', '#FFFFFF', '#111207'),
   rose: '#FF6B83',
   blue: '#65B7FF',
   success: '#67E8A5',

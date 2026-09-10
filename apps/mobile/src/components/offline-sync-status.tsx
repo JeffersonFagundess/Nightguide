@@ -2,6 +2,7 @@ import * as Network from 'expo-network';
 import { Cloud, CloudOff, RefreshCw } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   migrateLegacyOfflineQueue,
@@ -11,10 +12,13 @@ import {
   syncOfflineActions,
 } from '@/src/lib/offline-sync';
 import { useAuth } from '@/src/providers/auth-provider';
+import { usePreferences } from '@/src/providers/preferences-provider';
 import { colors } from '@/src/theme';
 
 export function OfflineSyncStatus() {
   const { user } = useAuth();
+  const { language } = usePreferences();
+  const insets = useSafeAreaInsets();
   const [online, setOnline] = useState(true);
   const [pending, setPending] = useState(0);
   const [syncing, setSyncing] = useState(false);
@@ -72,18 +76,21 @@ export function OfflineSyncStatus() {
   if (online && pending === 0 && sent === 0) return null;
 
   const Icon = online ? (syncing ? RefreshCw : Cloud) : CloudOff;
-  const message = sent
-    ? `${sent} ${sent === 1 ? 'alteração enviada' : 'alterações enviadas'}`
-    : !online
-      ? pending > 0
-        ? `Offline • ${pending} ${pending === 1 ? 'alteração salva' : 'alterações salvas'}`
-        : 'Modo offline • suas ações ficam salvas no aparelho'
-      : syncing
-        ? `Enviando ${pending} ${pending === 1 ? 'alteração' : 'alterações'}…`
-        : `${pending} ${pending === 1 ? 'alteração aguardando envio' : 'alterações aguardando envio'}`;
+  const plural = pending === 1 ? (language === 'pt' ? 'alteração' : 'change') : (language === 'pt' ? 'alterações' : 'changes');
+  const message = language === 'pt'
+    ? sent
+      ? `${sent} ${sent === 1 ? 'alteração enviada' : 'alterações enviadas'}`
+      : !online
+        ? pending > 0 ? `Offline • ${pending} ${pending === 1 ? 'alteração salva' : 'alterações salvas'}` : 'Modo offline • suas ações ficam salvas no aparelho'
+        : syncing ? `Enviando ${pending} ${plural}…` : `${pending} ${pending === 1 ? 'alteração aguardando envio' : 'alterações aguardando envio'}`
+    : sent
+      ? `${sent} ${sent === 1 ? 'change sent' : 'changes sent'}`
+      : !online
+        ? pending > 0 ? `Offline • ${pending} ${plural} saved` : 'Offline mode • your actions are saved on this device'
+        : syncing ? `Sending ${pending} ${plural}…` : `${pending} ${plural} waiting to be sent`;
 
   return (
-    <View pointerEvents="none" style={styles.wrapper}>
+    <View pointerEvents="none" style={[styles.wrapper, { bottom: 66 + Math.max(insets.bottom, 8) }]}>
       <View accessibilityLiveRegion="polite" style={styles.banner}>
         <Icon color={colors.accent} size={17} />
         <Text style={styles.text}>{message}</Text>
@@ -93,7 +100,7 @@ export function OfflineSyncStatus() {
 }
 
 const styles = StyleSheet.create({
-  wrapper: { position: 'absolute', left: 12, right: 12, bottom: 82, alignItems: 'center' },
+  wrapper: { position: 'absolute', left: 12, right: 12, alignItems: 'center' },
   banner: {
     maxWidth: 430,
     minHeight: 42,
@@ -105,7 +112,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: 'rgba(20,20,22,0.96)',
+    backgroundColor: colors.surface,
   },
   text: { color: colors.text, fontSize: 12, fontWeight: '800', flexShrink: 1 },
 });

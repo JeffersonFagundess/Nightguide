@@ -10,6 +10,7 @@ import { EmptyState, LoadingState } from '@/src/components/state';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useNightData } from '@/src/providers/data-provider';
+import { usePreferences } from '@/src/providers/preferences-provider';
 import { colors } from '@/src/theme';
 
 type OwnerVenue = { id: string; name: string; address: string; description: string; coverUrl: string };
@@ -21,6 +22,8 @@ const emptyEvent = (): OwnerEvent => ({ id: '', title: '', genre: '', descriptio
 export default function OwnerScreen() {
   const { user, profile } = useAuth();
   const { refresh } = useNightData();
+  const { language } = usePreferences();
+  const t = ownerCopy[language];
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [venue, setVenue] = useState<OwnerVenue>(emptyVenue);
@@ -72,10 +75,10 @@ export default function OwnerScreen() {
         if (error) throw error;
         setVenue((current) => ({ ...current, id: data.id }));
       }
-      Alert.alert('Estabelecimento salvo', 'As informações foram atualizadas no Supabase.');
+      Alert.alert(t.venueSaved, t.venueSavedText);
       await refresh();
     } catch (error) {
-      Alert.alert('Não foi possível salvar', error instanceof Error ? error.message : 'Tente novamente.');
+      Alert.alert(t.saveError, error instanceof Error ? error.message : t.tryAgain);
     } finally {
       setSaving(false);
     }
@@ -84,7 +87,7 @@ export default function OwnerScreen() {
   async function saveEvent() {
     if (!user || !supabase || !venue.id || !draft.title.trim()) return;
     const startsAt = parseDateTime(draft.startsAt);
-    if (!startsAt) return Alert.alert('Data inválida', 'Use o formato AAAA-MM-DD HH:mm.');
+    if (!startsAt) return Alert.alert(t.invalidDate, t.dateFormat);
     setSaving(true);
     try {
       const payload = { venue_id: venue.id, creator_id: user.id, title: draft.title.trim(), description: draft.description.trim(), genre: draft.genre.trim(), starts_at: startsAt, price: Number(draft.price.replace(',', '.')) || 0, cover_url: draft.coverUrl || venue.coverUrl || null, status: 'published' as const };
@@ -99,7 +102,7 @@ export default function OwnerScreen() {
       await loadOwnerData(user.id);
       await refresh();
     } catch (error) {
-      Alert.alert('Não foi possível salvar o evento', error instanceof Error ? error.message : 'Tente novamente.');
+      Alert.alert(t.eventSaveError, error instanceof Error ? error.message : t.tryAgain);
     } finally {
       setSaving(false);
     }
@@ -108,7 +111,7 @@ export default function OwnerScreen() {
   async function removeEvent(id: string) {
     if (!supabase || !user) return;
     const { error } = await supabase.from('events').delete().eq('id', id);
-    if (error) return Alert.alert('Não foi possível excluir', error.message);
+    if (error) return Alert.alert(t.deleteError, error.message);
     await loadOwnerData(user.id);
     await refresh();
   }
@@ -116,7 +119,7 @@ export default function OwnerScreen() {
   async function chooseCover(target: 'venue' | 'event', source: 'camera' | 'library') {
     if (!user || !supabase) return;
     const permission = source === 'camera' ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) return Alert.alert('Permissão necessária', source === 'camera' ? 'Permita o uso da câmera.' : 'Permita o acesso à galeria.');
+    if (!permission.granted) return Alert.alert(t.permission, source === 'camera' ? t.cameraPermission : t.galleryPermission);
     const result = source === 'camera'
       ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [16, 9], quality: 0.82 })
       : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [16, 9], quality: 0.82 });
@@ -135,60 +138,65 @@ export default function OwnerScreen() {
       if (target === 'venue') setVenue((current) => ({ ...current, coverUrl: publicUrl }));
       else setDraft((current) => ({ ...current, coverUrl: publicUrl }));
     } catch (error) {
-      Alert.alert('Falha no upload', error instanceof Error ? error.message : 'Não foi possível enviar a imagem.');
+      Alert.alert(t.uploadError, error instanceof Error ? error.message : t.uploadErrorText);
     } finally {
       setSaving(false);
     }
   }
 
-  if (loading) return <LoadingState label="Carregando o estabelecimento…" />;
-  if (!user || !supabase || profile?.role !== 'owner') return <Screen contentStyle={styles.center}><EmptyState icon={Pencil} title="Conta de dono necessária" text="O perfil precisa ter role owner no Supabase para editar um estabelecimento." /></Screen>;
+  if (loading) return <LoadingState label={t.loading} />;
+  if (!user || !supabase || profile?.role !== 'owner') return <Screen contentStyle={styles.center}><EmptyState icon={Pencil} title={t.ownerRequired} text={t.ownerRequiredText} /></Screen>;
 
   return (
     <Screen>
-      <Text style={styles.eyebrow}>GESTÃO NATIVA</Text>
-      <Text style={styles.title}>Seu estabelecimento</Text>
+      <Text style={styles.eyebrow}>{t.eyebrow}</Text>
+      <Text style={styles.title}>{t.title}</Text>
 
-      <Panel title="Perfil do local">
+      <Panel title={t.venueProfile}>
         {venue.coverUrl ? <Image source={{ uri: venue.coverUrl }} style={styles.cover} /> : <View style={[styles.cover, styles.coverEmpty]}><ImageIcon color={colors.muted} size={30} /></View>}
         <View style={styles.imageActions}>
-          <Button label="Galeria" icon={ImageIcon} variant="secondary" onPress={() => void chooseCover('venue', 'library')} style={styles.imageAction} />
-          <Button label="Câmera" icon={Camera} variant="secondary" onPress={() => void chooseCover('venue', 'camera')} style={styles.imageAction} />
+          <Button label={t.gallery} icon={ImageIcon} variant="secondary" onPress={() => void chooseCover('venue', 'library')} style={styles.imageAction} />
+          <Button label={t.camera} icon={Camera} variant="secondary" onPress={() => void chooseCover('venue', 'camera')} style={styles.imageAction} />
         </View>
-        <FormField label="Nome" value={venue.name} onChangeText={(name) => setVenue((current) => ({ ...current, name }))} />
-        <FormField label="Endereço" value={venue.address} onChangeText={(address) => setVenue((current) => ({ ...current, address }))} />
-        <FormField label="Descrição" value={venue.description} onChangeText={(description) => setVenue((current) => ({ ...current, description }))} multiline />
-        <Button label="Salvar estabelecimento" icon={Save} onPress={() => void saveVenue()} loading={saving} />
+        <FormField label={t.name} value={venue.name} onChangeText={(name) => setVenue((current) => ({ ...current, name }))} />
+        <FormField label={t.address} value={venue.address} onChangeText={(address) => setVenue((current) => ({ ...current, address }))} />
+        <FormField label={t.description} value={venue.description} onChangeText={(description) => setVenue((current) => ({ ...current, description }))} multiline />
+        <Button label={t.saveVenue} icon={Save} onPress={() => void saveVenue()} loading={saving} />
       </Panel>
 
-      <Panel title={draft.id ? 'Editar evento' : 'Criar evento'}>
-        <FormField label="Título" value={draft.title} onChangeText={(title) => setDraft((current) => ({ ...current, title }))} />
-        <FormField label="Gênero" value={draft.genre} onChangeText={(genre) => setDraft((current) => ({ ...current, genre }))} />
-        <FormField label="Data e hora (AAAA-MM-DD HH:mm)" value={draft.startsAt} onChangeText={(startsAt) => setDraft((current) => ({ ...current, startsAt }))} autoCapitalize="none" />
-        <FormField label="Preço em reais" value={draft.price} onChangeText={(price) => setDraft((current) => ({ ...current, price }))} keyboardType="decimal-pad" />
-        <FormField label="Descrição" value={draft.description} onChangeText={(description) => setDraft((current) => ({ ...current, description }))} multiline />
+      <Panel title={draft.id ? t.editEvent : t.createEvent}>
+        <FormField label={t.eventTitle} value={draft.title} onChangeText={(title) => setDraft((current) => ({ ...current, title }))} />
+        <FormField label={t.genre} value={draft.genre} onChangeText={(genre) => setDraft((current) => ({ ...current, genre }))} />
+        <FormField label={t.dateTime} value={draft.startsAt} onChangeText={(startsAt) => setDraft((current) => ({ ...current, startsAt }))} autoCapitalize="none" />
+        <FormField label={t.price} value={draft.price} onChangeText={(price) => setDraft((current) => ({ ...current, price }))} keyboardType="decimal-pad" />
+        <FormField label={t.description} value={draft.description} onChangeText={(description) => setDraft((current) => ({ ...current, description }))} multiline />
         {draft.coverUrl ? <Image source={{ uri: draft.coverUrl }} style={styles.eventCover} /> : null}
         <View style={styles.imageActions}>
-          <Button label="Capa da galeria" icon={ImageIcon} variant="secondary" onPress={() => void chooseCover('event', 'library')} style={styles.imageAction} />
-          <Button label="Fotografar" icon={Camera} variant="secondary" onPress={() => void chooseCover('event', 'camera')} style={styles.imageAction} />
+          <Button label={t.galleryCover} icon={ImageIcon} variant="secondary" onPress={() => void chooseCover('event', 'library')} style={styles.imageAction} />
+          <Button label={t.takePhoto} icon={Camera} variant="secondary" onPress={() => void chooseCover('event', 'camera')} style={styles.imageAction} />
         </View>
-        <Button label={draft.id ? 'Salvar edição' : 'Publicar evento'} icon={draft.id ? Save : Plus} onPress={() => void saveEvent()} loading={saving} disabled={!venue.id} />
-        {draft.id ? <Button label="Cancelar edição" variant="ghost" onPress={() => setDraft(emptyEvent())} /> : null}
-        {!venue.id ? <Text style={styles.hint}>Salve o estabelecimento antes de publicar o primeiro evento.</Text> : null}
+        <Button label={draft.id ? t.saveEdit : t.publishEvent} icon={draft.id ? Save : Plus} onPress={() => void saveEvent()} loading={saving} disabled={!venue.id} />
+        {draft.id ? <Button label={t.cancelEdit} variant="ghost" onPress={() => setDraft(emptyEvent())} /> : null}
+        {!venue.id ? <Text style={styles.hint}>{t.saveFirst}</Text> : null}
       </Panel>
 
-      <Panel title="Eventos publicados">
+      <Panel title={t.publishedEvents}>
         {events.length ? events.map((event) => (
           <View key={event.id} style={styles.eventRow}>
             <View style={styles.eventCopy}><Text style={styles.eventTitle}>{event.title}</Text><Text style={styles.eventMeta}>{event.startsAt} • R$ {event.price}</Text></View>
             <Pressable onPress={() => setDraft(event)} style={styles.rowIcon}><Pencil size={17} color={colors.text} /></Pressable>
-            <Pressable onPress={() => Alert.alert('Excluir evento?', event.title, [{ text: 'Cancelar', style: 'cancel' }, { text: 'Excluir', style: 'destructive', onPress: () => void removeEvent(event.id) }])} style={styles.rowIcon}><Trash2 size={17} color={colors.rose} /></Pressable>
+            <Pressable onPress={() => Alert.alert(t.deleteEvent, event.title, [{ text: t.cancel, style: 'cancel' }, { text: t.delete, style: 'destructive', onPress: () => void removeEvent(event.id) }])} style={styles.rowIcon}><Trash2 size={17} color={colors.rose} /></Pressable>
           </View>
-        )) : <Text style={styles.hint}>Nenhum evento publicado por este estabelecimento.</Text>}
+        )) : <Text style={styles.hint}>{t.noEvents}</Text>}
       </Panel>
     </Screen>
   );
 }
+
+const ownerCopy = {
+  pt: { venueSaved: 'Estabelecimento salvo', venueSavedText: 'As informações foram atualizadas no Supabase.', saveError: 'Não foi possível salvar', tryAgain: 'Tente novamente.', invalidDate: 'Data inválida', dateFormat: 'Use o formato AAAA-MM-DD HH:mm.', eventSaveError: 'Não foi possível salvar o evento', deleteError: 'Não foi possível excluir', permission: 'Permissão necessária', cameraPermission: 'Permita o uso da câmera.', galleryPermission: 'Permita o acesso à galeria.', uploadError: 'Falha no upload', uploadErrorText: 'Não foi possível enviar a imagem.', loading: 'Carregando o estabelecimento…', ownerRequired: 'Conta de dono necessária', ownerRequiredText: 'O perfil precisa ter role owner no Supabase para editar um estabelecimento.', eyebrow: 'GESTÃO NATIVA', title: 'Seu estabelecimento', venueProfile: 'Perfil do local', gallery: 'Galeria', camera: 'Câmera', name: 'Nome', address: 'Endereço', description: 'Descrição', saveVenue: 'Salvar estabelecimento', editEvent: 'Editar evento', createEvent: 'Criar evento', eventTitle: 'Título', genre: 'Gênero', dateTime: 'Data e hora (AAAA-MM-DD HH:mm)', price: 'Preço em reais', galleryCover: 'Capa da galeria', takePhoto: 'Fotografar', saveEdit: 'Salvar edição', publishEvent: 'Publicar evento', cancelEdit: 'Cancelar edição', saveFirst: 'Salve o estabelecimento antes de publicar o primeiro evento.', publishedEvents: 'Eventos publicados', deleteEvent: 'Excluir evento?', cancel: 'Cancelar', delete: 'Excluir', noEvents: 'Nenhum evento publicado por este estabelecimento.' },
+  en: { venueSaved: 'Venue saved', venueSavedText: 'The information was updated in Supabase.', saveError: 'Unable to save', tryAgain: 'Try again.', invalidDate: 'Invalid date', dateFormat: 'Use YYYY-MM-DD HH:mm.', eventSaveError: 'Unable to save event', deleteError: 'Unable to delete', permission: 'Permission required', cameraPermission: 'Allow camera access.', galleryPermission: 'Allow gallery access.', uploadError: 'Upload failed', uploadErrorText: 'Unable to upload the image.', loading: 'Loading venue…', ownerRequired: 'Owner account required', ownerRequiredText: 'The profile must have the owner role in Supabase to edit a venue.', eyebrow: 'NATIVE MANAGEMENT', title: 'Your venue', venueProfile: 'Venue profile', gallery: 'Gallery', camera: 'Camera', name: 'Name', address: 'Address', description: 'Description', saveVenue: 'Save venue', editEvent: 'Edit event', createEvent: 'Create event', eventTitle: 'Title', genre: 'Genre', dateTime: 'Date and time (YYYY-MM-DD HH:mm)', price: 'Price in BRL', galleryCover: 'Gallery cover', takePhoto: 'Take photo', saveEdit: 'Save changes', publishEvent: 'Publish event', cancelEdit: 'Cancel editing', saveFirst: 'Save the venue before publishing the first event.', publishedEvents: 'Published events', deleteEvent: 'Delete event?', cancel: 'Cancel', delete: 'Delete', noEvents: 'No events published by this venue.' },
+} as const;
 
 function Panel({ title, children }: React.PropsWithChildren<{ title: string }>) {
   return <View style={styles.panel}><Text style={styles.panelTitle}>{title}</Text><View style={styles.panelBody}>{children}</View></View>;

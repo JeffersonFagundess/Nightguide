@@ -1,5 +1,5 @@
 import * as Notifications from 'expo-notifications';
-import { DarkTheme, Stack, ThemeProvider, router } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
@@ -8,6 +8,7 @@ import { OfflineSyncStatus } from '@/src/components/offline-sync-status';
 import { AuthProvider } from '@/src/providers/auth-provider';
 import { DataProvider } from '@/src/providers/data-provider';
 import { PreferencesProvider } from '@/src/providers/preferences-provider';
+import { usePreferences } from '@/src/providers/preferences-provider';
 import { UserDataProvider } from '@/src/providers/user-data-provider';
 import { colors } from '@/src/theme';
 
@@ -15,20 +16,27 @@ export { ErrorBoundary } from 'expo-router';
 
 export const unstable_settings = { initialRouteName: '(tabs)' };
 
-const nightTheme = {
-  ...DarkTheme,
-  colors: {
-    ...DarkTheme.colors,
-    primary: colors.accent,
-    background: colors.background,
-    card: colors.surface,
-    text: colors.text,
-    border: colors.border,
-    notification: colors.rose,
-  },
-};
-
 export default function RootLayout() {
+  return <PreferencesProvider><AppNavigation /></PreferencesProvider>;
+}
+
+function AppNavigation() {
+  const { theme, language } = usePreferences();
+  const baseTheme = theme === 'dark' ? DarkTheme : DefaultTheme;
+  const nightTheme = {
+    ...baseTheme,
+    dark: theme === 'dark',
+    colors: {
+      ...baseTheme.colors,
+      primary: colors.accent,
+      background: colors.background,
+      card: colors.surface,
+      text: colors.text,
+      border: colors.border,
+      notification: colors.rose,
+    },
+  };
+
   useEffect(() => {
     void prepareNotifications();
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
@@ -40,27 +48,25 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={nightTheme}>
-      <PreferencesProvider>
-        <AuthProvider>
+      <AuthProvider>
           <DataProvider>
             <UserDataProvider>
-              <StatusBar style="light" />
+              <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
               <Stack screenOptions={{ headerStyle: { backgroundColor: colors.background }, headerTintColor: colors.text, headerShadowVisible: false }}>
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                <Stack.Screen name="event/[id]" options={{ title: 'Evento', presentation: 'card' }} />
-                <Stack.Screen name="venue/[id]" options={{ title: 'Estabelecimento', presentation: 'card' }} />
-                <Stack.Screen name="checkout/[eventId]" options={{ title: 'Ingresso', presentation: 'card' }} />
-                <Stack.Screen name="auth/login" options={{ title: 'Entrar', presentation: 'modal' }} />
-                <Stack.Screen name="auth/register" options={{ title: 'Criar conta', presentation: 'modal' }} />
-                <Stack.Screen name="auth/callback" options={{ title: 'Autenticação' }} />
-                <Stack.Screen name="scanner" options={{ title: 'Validar ingresso', presentation: 'fullScreenModal' }} />
-                <Stack.Screen name="owner" options={{ title: 'Painel do estabelecimento' }} />
+                <Stack.Screen name="event/[id]" options={{ title: language === 'pt' ? 'Evento' : 'Event', presentation: 'card' }} />
+                <Stack.Screen name="venue/[id]" options={{ title: language === 'pt' ? 'Estabelecimento' : 'Venue', presentation: 'card' }} />
+                <Stack.Screen name="checkout/[eventId]" options={{ title: language === 'pt' ? 'Ingresso' : 'Ticket', presentation: 'card' }} />
+                <Stack.Screen name="auth/login" options={{ title: language === 'pt' ? 'Entrar' : 'Sign in', presentation: 'modal' }} />
+                <Stack.Screen name="auth/register" options={{ title: language === 'pt' ? 'Criar conta' : 'Create account', presentation: 'modal' }} />
+                <Stack.Screen name="auth/callback" options={{ title: language === 'pt' ? 'Autenticação' : 'Authentication' }} />
+                <Stack.Screen name="scanner" options={{ title: language === 'pt' ? 'Validar ingresso' : 'Validate ticket', presentation: 'fullScreenModal' }} />
+                <Stack.Screen name="owner" options={{ title: language === 'pt' ? 'Painel do estabelecimento' : 'Venue dashboard' }} />
               </Stack>
               <OfflineSyncStatus />
             </UserDataProvider>
           </DataProvider>
         </AuthProvider>
-      </PreferencesProvider>
     </ThemeProvider>
   );
 }

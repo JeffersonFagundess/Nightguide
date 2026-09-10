@@ -8,7 +8,7 @@ const localVenues = realVenues.map(venue => ({ ...venue, ...venuePhoto(venue.nam
 import { supabase } from '@/src/lib/supabase';
 import type { NightEvent, Venue } from '@/src/types';
 
-const cacheKey = 'nightguide:home-cache:v2';
+const cacheKey = 'nightguide:home-cache:v3';
 
 type HomeCache = { events: NightEvent[]; venues: Venue[] };
 type DataContextValue = HomeCache & {
@@ -129,6 +129,8 @@ function mapEvent(row: Record<string, unknown>): NightEvent | null {
 
 function mapVenue(row: Record<string, unknown>): Venue | null {
   if (!row.id || !row.name || row.latitude == null || row.longitude == null) return null;
+  const photo = venuePhoto(String(row.name), String(row.category || 'Restaurante'));
+  const uploadedCover = typeof row.cover_url === 'string' && row.cover_url.trim() ? row.cover_url : undefined;
   return {
     id: String(row.id),
     name: String(row.name),
@@ -138,6 +140,7 @@ function mapVenue(row: Record<string, unknown>): Venue | null {
     longitude: Number(row.longitude),
     address: String(row.address || 'Saquarema'),
     vibe: String(row.description || row.category || 'Noite local'),
-    ...venuePhoto(String(row.name), String(row.category || 'Restaurante')),
+    ...photo,
+    ...(uploadedCover ? { coverUrl: uploadedCover, coverAsset: undefined, photoCredit: undefined, photoSource: undefined, photoIllustrative: undefined } : {}),
   };
 }

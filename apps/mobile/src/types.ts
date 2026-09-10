@@ -28,6 +28,7 @@ export type Venue = {
   address: string;
   vibe: string;
   coverUrl?: string;
+  coverAsset?: number;
   photoCredit?: string;
   photoSource?: string;
   photoIllustrative?: boolean;
@@ -67,6 +68,7 @@ export type Review = {
   createdAt: string;
   photoUri?: string;
   photoUrl?: string;
+  photoAsset?: number;
   photoMimeType?: string;
   photoFileName?: string;
   authorName?: string;

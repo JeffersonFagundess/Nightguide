@@ -10,25 +10,28 @@ import { EmptyState, LoadingState } from '@/src/components/state';
 import { formatBRL } from '@/src/lib/storage';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useUserData } from '@/src/providers/user-data-provider';
+import { usePreferences } from '@/src/providers/preferences-provider';
 import { colors } from '@/src/theme';
 import type { Ticket } from '@/src/types';
 
 export default function TicketsScreen() {
   const { ready: authReady, user } = useAuth();
   const { ready, tickets, cancelTicket } = useUserData();
+  const { language } = usePreferences();
+  const t = ticketCopy[language];
 
-  if (!authReady || !ready) return <LoadingState label="Carregando seus ingressos…" />;
+  if (!authReady || !ready) return <LoadingState label={t.loading} />;
 
   if (!user) {
     return (
       <Screen contentStyle={styles.centerContent}>
         <EmptyState
           icon={TicketIcon}
-          title="Entre para ver seus ingressos"
-          text="Crie uma conta normal com e-mail e senha ou use o Google quando ele estiver configurado."
-          action={{ label: 'Entrar', onPress: () => router.push('/auth/login') }}
+          title={t.signInTitle}
+          text={t.signInText}
+          action={{ label: t.signIn, onPress: () => router.push('/auth/login') }}
         />
-        <Button label="Criar minha conta" variant="secondary" onPress={() => router.push('/auth/register')} />
+        <Button label={t.createAccount} variant="secondary" onPress={() => router.push('/auth/register')} />
       </Screen>
     );
   }
@@ -36,27 +39,28 @@ export default function TicketsScreen() {
   return (
     <Screen>
       <View style={styles.headingRow}>
-        <View style={styles.headingCopy}><Text style={styles.eyebrow}>CARTEIRA DIGITAL</Text><Text style={styles.title}>Meus ingressos</Text></View>
+        <View style={styles.headingCopy}><Text style={styles.eyebrow}>{t.eyebrow}</Text><Text style={styles.title}>{t.title}</Text></View>
         <LanguageSwitch />
       </View>
-      <Text style={styles.subtitle}>Apresente o QR Code na entrada do evento.</Text>
+      <Text style={styles.subtitle}>{t.subtitle}</Text>
 
       <View style={styles.list}>
         {tickets.length ? tickets.map((ticket) => (
           <TicketCard
             key={ticket.id}
             ticket={ticket}
-            onRemove={() => Alert.alert('Remover ingresso?', 'Esta ação remove o ingresso deste aparelho.', [
-              { text: 'Cancelar', style: 'cancel' },
-              { text: 'Remover', style: 'destructive', onPress: () => void cancelTicket(ticket.id) },
+            language={language}
+            onRemove={() => Alert.alert(t.removeTitle, t.removeText, [
+              { text: t.cancel, style: 'cancel' },
+              { text: t.remove, style: 'destructive', onPress: () => void cancelTicket(ticket.id) },
             ])}
           />
         )) : (
           <EmptyState
             icon={QrCode}
-            title="Nenhum ingresso ainda"
-            text="Escolha um evento e conclua o checkout de teste. O ingresso aparecerá aqui."
-            action={{ label: 'Descobrir eventos', onPress: () => router.navigate('/(tabs)') }}
+            title={t.emptyTitle}
+            text={t.emptyText}
+            action={{ label: t.discover, onPress: () => router.navigate('/(tabs)') }}
           />
         )}
       </View>
@@ -64,12 +68,12 @@ export default function TicketsScreen() {
   );
 }
 
-function TicketCard({ ticket, onRemove }: { ticket: Ticket; onRemove: () => void }) {
+function TicketCard({ ticket, onRemove, language }: { ticket: Ticket; onRemove: () => void; language: 'pt' | 'en' }) {
   return (
     <View style={styles.ticket}>
       <View style={styles.ticketHeader}>
         <View style={styles.ticketCopy}>
-          <Text style={styles.ticketTag}>INGRESSO APROVADO</Text>
+          <Text style={styles.ticketTag}>{language === 'pt' ? 'INGRESSO APROVADO' : 'APPROVED TICKET'}</Text>
           <Text style={styles.ticketTitle}>{ticket.eventTitle}</Text>
           <Text style={styles.ticketMeta}>{ticket.venue}</Text>
           <Text style={styles.ticketMeta}>{ticket.date} • {ticket.time} • {ticket.quantity}x</Text>
@@ -82,13 +86,18 @@ function TicketCard({ ticket, onRemove }: { ticket: Ticket; onRemove: () => void
           <Text style={styles.code}>{ticket.id}</Text>
           <Text style={styles.payment}>{ticket.paymentLabel} • {formatBRL(ticket.totalAmount)}</Text>
         </View>
-        <Pressable accessibilityLabel="Remover ingresso" hitSlop={8} onPress={onRemove} style={styles.trash}>
+        <Pressable accessibilityLabel={language === 'pt' ? 'Remover ingresso' : 'Remove ticket'} hitSlop={8} onPress={onRemove} style={styles.trash}>
           <Trash2 size={18} color={colors.rose} />
         </Pressable>
       </View>
     </View>
   );
 }
+
+const ticketCopy = {
+  pt: { loading: 'Carregando seus ingressos…', signInTitle: 'Entre para ver seus ingressos', signInText: 'Crie uma conta normal com e-mail e senha ou use o Google quando ele estiver configurado.', signIn: 'Entrar', createAccount: 'Criar minha conta', eyebrow: 'CARTEIRA DIGITAL', title: 'Meus ingressos', subtitle: 'Apresente o QR Code na entrada do evento.', removeTitle: 'Remover ingresso?', removeText: 'Esta ação remove o ingresso deste aparelho.', cancel: 'Cancelar', remove: 'Remover', emptyTitle: 'Nenhum ingresso ainda', emptyText: 'Escolha um evento e conclua o checkout de teste. O ingresso aparecerá aqui.', discover: 'Descobrir eventos' },
+  en: { loading: 'Loading your tickets…', signInTitle: 'Sign in to see your tickets', signInText: 'Create an account with email and password, or use Google when available.', signIn: 'Sign in', createAccount: 'Create my account', eyebrow: 'DIGITAL WALLET', title: 'My tickets', subtitle: 'Show the QR code at the event entrance.', removeTitle: 'Remove ticket?', removeText: 'This removes the ticket from this device.', cancel: 'Cancel', remove: 'Remove', emptyTitle: 'No tickets yet', emptyText: 'Choose an event and complete the test checkout. Your ticket will appear here.', discover: 'Discover events' },
+} as const;
 
 const styles = StyleSheet.create({
   centerContent: { justifyContent: 'center', gap: 12 },
