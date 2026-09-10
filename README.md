@@ -2,9 +2,9 @@
 
 NightGuide e uma aplicacao web/mobile hibrida para centralizar eventos, bares e experiencias noturnas em Saquarema-RJ. O projeto nasceu como trabalho de faculdade/extensao e foi evoluido para um MVP moderno com carrossel full screen, mapa, autenticacao, conta de cliente, painel de dono de estabelecimento, PWA, modo claro/escuro, idiomas PT/EN e simulacao de compra de ingressos com Mercado Pago.
 
-> Status atual: MVP hibrido/PWA pronto para Vercel e regressao nativa em desenvolvimento ativo na branch `native-regression`.
+> Status atual: MVP web em producao e aplicativo nativo Android pronto para demonstracao, ambos na branch `main`.
 
-Na branch `native-regression`, a nova base Expo/React Native fica em `apps/mobile`. Ela convive com a versao web e ja inclui cadastro/login por email e senha, Google opcional, descoberta, favoritos, mapa/localizacao, ingressos com QR, scanner, notificacoes locais, painel nativo de estabelecimento e publicacoes com foto que sincronizam depois do uso offline.
+A base Expo/React Native fica em `apps/mobile`. Ela convive com a versao web e inclui cadastro/login por email e senha, Google opcional, descoberta, favoritos, mapa/localizacao, ingressos com QR, scanner, notificacoes locais, painel nativo de estabelecimento e publicacoes com foto que sincronizam depois do uso offline.
 
 ## Links uteis
 
@@ -12,6 +12,7 @@ Na branch `native-regression`, a nova base Expo/React Native fica em `apps/mobil
 - Schema Supabase: [`supabase/schema.sql`](supabase/schema.sql)
 - Imagens do carrossel: [`public/carousel-source-images`](public/carousel-source-images)
 - Documentacao completa: [`docs`](docs)
+- Roteiro da apresentacao: [`docs/DEMO_CHECKLIST.md`](docs/DEMO_CHECKLIST.md)
 
 ## Stack
 
@@ -39,6 +40,9 @@ Na branch `native-regression`, a nova base Expo/React Native fica em `apps/mobil
 - Mensagem de pagamento confirmado dentro da tela.
 - PWA instalavel no celular e cache de paginas/imagens.
 - Idioma portugues/ingles e tema claro/escuro.
+- Favoritos, ingressos e publicacoes persistidos apos fechar/reabrir.
+- Fila offline com sincronizacao automatica ao voltar a internet.
+- APK Android standalone gerado pelo GitHub Actions.
 
 ## Como rodar localmente
 
@@ -48,6 +52,22 @@ npm run dev
 ```
 
 Acesse `http://localhost:3000`.
+
+Aplicativo nativo:
+
+```bash
+cd apps/mobile
+pnpm install
+pnpm start
+```
+
+Para gerar um APK pelo EAS, faça login uma vez e use:
+
+```bash
+pnpm build:apk
+```
+
+O repositório também gera um APK standalone automaticamente no workflow **Build Android APK**. O arquivo aparece como artefato `NightGuide-Android-APK` na execução do GitHub Actions.
 
 Para build de producao:
 
@@ -117,8 +137,8 @@ O arquivo `supabase/schema.sql` cria as tabelas principais, ativa RLS e define p
 
 ## Branches
 
-- `main`: MVP hibrido/PWA atual, pronto para web, mobile browser e instalacao como PWA.
-- `native-regression`: base documentada para a regressao/migracao para app nativo.
+- `main`: fonte oficial do MVP web/PWA e do aplicativo nativo Android.
+- `native-regression`: histórico inicial da migração, mantido apenas como referência.
 
 ## Observacoes de produto
 
