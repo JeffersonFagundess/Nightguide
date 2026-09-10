@@ -54,7 +54,7 @@ jobs:
         working-directory: apps/mobile/android
 
       - name: Build standalone APK
-        run: ./gradlew assembleRelease --no-daemon
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
         working-directory: apps/mobile/android
 
       - name: Upload APK
@@ -64,4 +64,3 @@ jobs:
           path: apps/mobile/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 30
-
