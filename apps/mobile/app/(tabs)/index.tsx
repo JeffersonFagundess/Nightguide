@@ -97,6 +97,7 @@ export default function DiscoveryScreen() {
               {venue.coverUrl ? <Image source={{ uri: venue.coverUrl }} style={styles.venueImage} /> : <Text style={styles.venueIcon}>📍</Text>}
               <View style={{ flex: 1, gap: 5 }}>
                 <Text style={styles.venueName}>{venue.name}</Text>
+                <Text style={styles.subtitleSmall}>{venue.photoIllustrative ? 'Imagem ilustrativa' : venue.photoCredit}</Text>
                 <Text style={styles.subtitleSmall}>{venue.category} · {venue.address}</Text>
                 <Text style={styles.source}>{language === 'pt' ? 'VER PERFIL E AVALIAÇÕES →' : 'PROFILE AND REVIEWS →'}</Text>
               </View>

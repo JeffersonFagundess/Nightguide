@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { MapPin, MessageSquare, RefreshCw, Star, UserRound } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/src/components/button';
 import { Screen } from '@/src/components/screen';
@@ -90,6 +90,8 @@ export default function VenueProfileScreen() {
     <Screen>
       {venue.coverUrl ? <Image source={{ uri: venue.coverUrl }} resizeMode="cover" style={styles.cover} /> : <View style={styles.coverFallback}><MapPin size={36} color={colors.accent} /></View>}
       <Text style={styles.eyebrow}>PERFIL DO ESTABELECIMENTO</Text>
+      {venue.photoCredit ? <Text style={styles.meta} onPress={() => { if (venue.photoSource) void Linking.openURL(venue.photoSource).catch(() => undefined); }}>{venue.photoCredit} · Ver fonte</Text> : null}
+      {venue.photoIllustrative === false ? <Text style={styles.meta} onPress={() => void Linking.openURL('https://creativecommons.org/licenses/by-sa/3.0/').catch(() => undefined)}>Foto histórica sem edição · Licença CC BY-SA 3.0</Text> : null}
       <Text style={styles.title}>{venue.name}</Text>
       <View style={styles.metaRow}>
         <MapPin size={15} color={colors.accent} />

@@ -3,6 +3,8 @@ import { createContext, type PropsWithChildren, useCallback, useContext, useEffe
 
 import { fallbackEvents, fallbackVenues } from '@/src/data/fallback';
 import realVenues from '@/src/data/real-venues.json';
+import { venuePhoto } from '@/src/data/venue-photos';
+const localVenues = realVenues.map(venue => ({ ...venue, ...venuePhoto(venue.name, venue.category) }));
 import { supabase } from '@/src/lib/supabase';
 import type { NightEvent, Venue } from '@/src/types';
 
@@ -21,7 +23,7 @@ const DataContext = createContext<DataContextValue | null>(null);
 
 export function DataProvider({ children }: PropsWithChildren) {
   const [events, setEvents] = useState<NightEvent[]>(fallbackEvents);
-  const [venues, setVenues] = useState<Venue[]>(realVenues);
+  const [venues, setVenues] = useState<Venue[]>(localVenues);
   const [source, setSource] = useState<DataContextValue['source']>('demo');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -31,7 +33,7 @@ export function DataProvider({ children }: PropsWithChildren) {
     try {
       if (!supabase) {
         setEvents(fallbackEvents);
-        setVenues(realVenues);
+        setVenues(localVenues);
         setSource('demo');
         return;
       }
@@ -57,7 +59,7 @@ export function DataProvider({ children }: PropsWithChildren) {
       const nextVenues = (venuesResult.data || []).map(mapVenue).filter((venue): venue is Venue => Boolean(venue));
       const data = {
         events: nextEvents.length ? nextEvents : fallbackEvents,
-        venues: nextVenues.length ? nextVenues : realVenues,
+        venues: nextVenues.length ? nextVenues : localVenues,
       };
       setEvents(data.events);
       setVenues(data.venues);
@@ -72,7 +74,7 @@ export function DataProvider({ children }: PropsWithChildren) {
         setSource('cache');
       } else {
         setEvents(fallbackEvents);
-        setVenues(realVenues);
+        setVenues(localVenues);
         setSource('demo');
       }
     } finally {
@@ -136,6 +138,6 @@ function mapVenue(row: Record<string, unknown>): Venue | null {
     longitude: Number(row.longitude),
     address: String(row.address || 'Saquarema'),
     vibe: String(row.description || row.category || 'Noite local'),
-    coverUrl: row.cover_url ? String(row.cover_url) : undefined,
+    ...venuePhoto(String(row.name), String(row.category || 'Restaurante')),
   };
 }

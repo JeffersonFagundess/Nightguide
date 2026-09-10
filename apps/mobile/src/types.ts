@@ -28,6 +28,9 @@ export type Venue = {
   address: string;
   vibe: string;
   coverUrl?: string;
+  photoCredit?: string;
+  photoSource?: string;
+  photoIllustrative?: boolean;
 };
 
 export type Profile = {
