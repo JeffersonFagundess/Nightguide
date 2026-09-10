@@ -58,7 +58,7 @@ export default function VenueProfileScreen() {
         authorName: String(row.author_name || 'NightGuide'),
         authorAvatarUrl: row.author_avatar_url ? String(row.author_avatar_url) : undefined,
       }));
-      const visibleReviews = next.length ? next : demoReviews;
+      const visibleReviews = [...next, ...demoReviews];
       setRemoteReviews(visibleReviews);
       await writeJson(cacheKey, visibleReviews);
     } catch {
@@ -78,7 +78,7 @@ export default function VenueProfileScreen() {
     const ownLocal = localReviews
       .filter((review) => review.venueId === venueId)
       .map((review) => ({ ...review, userId: user?.id, authorName: profile?.fullName || 'NightGuide' }));
-    const otherRemote = user ? remoteReviews.filter((review) => review.userId !== user.id) : remoteReviews;
+    const otherRemote = remoteReviews.filter((review) => !ownLocal.some(local => local.id === review.id || (local.userId === review.userId && local.venueId === review.venueId)));
     return [...ownLocal, ...otherRemote].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }, [localReviews, profile?.fullName, remoteReviews, user, venueId]);
 
@@ -125,11 +125,11 @@ export default function VenueProfileScreen() {
                 <Text style={styles.date}>{new Date(review.createdAt).toLocaleDateString('pt-BR')}</Text>
               </View>
               <Text style={styles.postDescription}>{review.comment}</Text>
-              {review.photoUri || review.photoUrl ? <Image source={{ uri: review.photoUri || review.photoUrl }} resizeMode="cover" style={styles.postImage} /> : null}
+              {review.photoUri || review.photoUrl ? <Image source={{ uri: review.photoUri || review.photoUrl }} resizeMode="contain" style={styles.postImage} /> : null}
               <View style={styles.postFooter}>
                 <View style={styles.footerLeft}>
                   <Text style={styles.rating}>{'★'.repeat(review.rating)}<Text style={styles.ratingMuted}>{'★'.repeat(5 - review.rating)}</Text></Text>
-                  {review.isDemo ? <Text style={styles.exampleLabel}>EXEMPLO</Text> : null}
+                  {review.isDemo ? <Text style={styles.exampleLabel}>DEMONSTRAÇÃO · FOTO ILUSTRATIVA, NÃO É DO LOCAL</Text> : null}
                 </View>
               </View>
             </View>

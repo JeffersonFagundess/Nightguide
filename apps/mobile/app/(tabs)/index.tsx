@@ -1,6 +1,8 @@
 import { Search, SlidersHorizontal } from 'lucide-react-native';
+import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { CommunityFeed } from '@/src/components/community-feed';
 
 import { Brand } from '@/src/components/brand';
 import { EventCard } from '@/src/components/event-card';
@@ -16,7 +18,7 @@ const filters = ['Tudo', 'Grátis', 'Ao vivo', 'Praia', 'Perto'] as const;
 type Filter = (typeof filters)[number];
 
 export default function DiscoveryScreen() {
-  const { events, refresh, refreshing, source } = useNightData();
+  const { events, venues, refresh, refreshing, source } = useNightData();
   const { favoriteIds, toggleFavorite } = useUserData();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('Tudo');
@@ -87,6 +89,22 @@ export default function DiscoveryScreen() {
           </>
         ) : null}
 
+        <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>{language === 'pt' ? 'Explore Saquarema' : 'Explore Saquarema'}</Text></View>
+        <View style={styles.eventList}>
+          {venues.filter(venue => !query || normalize(`${venue.name} ${venue.category} ${venue.address}`).includes(normalize(query))).map(venue => (
+            <Pressable key={venue.id} style={styles.venueCard} accessibilityRole="button"
+              onPress={() => router.push({ pathname: '/venue/[id]', params: { id: venue.id } })}>
+              {venue.coverUrl ? <Image source={{ uri: venue.coverUrl }} style={styles.venueImage} /> : <Text style={styles.venueIcon}>📍</Text>}
+              <View style={{ flex: 1, gap: 5 }}>
+                <Text style={styles.venueName}>{venue.name}</Text>
+                <Text style={styles.subtitleSmall}>{venue.category} · {venue.address}</Text>
+                <Text style={styles.source}>{language === 'pt' ? 'VER PERFIL E AVALIAÇÕES →' : 'PROFILE AND REVIEWS →'}</Text>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+        <CommunityFeed />
+
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>{query || filter !== 'Tudo' ? t.results : t.upcoming}</Text>
           <Text style={styles.count}>{visible.length}</Text>
@@ -147,6 +165,11 @@ function matchesFilter(event: NightEvent, filter: Filter) {
 }
 
 const styles = StyleSheet.create({
+  venueCard: { flexDirection: 'row', alignItems: 'center', gap: 13, padding: 14, borderRadius: 18, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  venueImage: { width: 85, height: 90, borderRadius: 12 },
+  venueIcon: { fontSize: 30, width: 45, textAlign: 'center' },
+  venueName: { color: colors.text, fontSize: 18, fontWeight: '800' },
+  subtitleSmall: { color: colors.muted, fontSize: 13, lineHeight: 19 },
   screen: { flex: 1, backgroundColor: colors.background },
   content: { paddingTop: 58, paddingBottom: 34 },
   topbar: { paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

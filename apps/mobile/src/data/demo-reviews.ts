@@ -1,4 +1,5 @@
 import type { Review } from '@/src/types';
+import realVenues from './real-venues.json';
 
 /**
  * Read-only examples keep a fresh install useful before the first real review
@@ -73,6 +74,14 @@ const examples: Record<string, Review[]> = {
 };
 
 export function getDemoReviews(venueName: string | undefined): Review[] {
+  const venue = realVenues.find(item => item.name === venueName);
+  if (venue) return [0, 1].map(index => ({
+    id: `demo-${venue.id}-${index}`, userId: `demo-visitor-${index}`, venueId: venue.id, venue: venue.name,
+    rating: index === 0 ? 5 : 4, createdAt: '2026-09-10T12:00:00.000Z',
+    authorName: index === 0 ? 'Camila (personagem de exemplo)' : 'Rafael (personagem de exemplo)',
+    comment: index === 0 ? 'Exemplo de publicação: aqui você pode contar como foi seu passeio, avaliar e compartilhar uma foto.' : 'Exemplo de avaliação: seu comentário pode ser salvo offline e enviado quando a conexão voltar.',
+    photoUrl: index === 0 ? 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&q=80' : 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80',
+    isDemo: true,
+  }));
   return venueName ? (examples[venueName] || []).map((review) => ({ ...review })) : [];
 }
-

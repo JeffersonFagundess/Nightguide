@@ -2,10 +2,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { fallbackEvents, fallbackVenues } from '@/src/data/fallback';
+import realVenues from '@/src/data/real-venues.json';
 import { supabase } from '@/src/lib/supabase';
 import type { NightEvent, Venue } from '@/src/types';
 
-const cacheKey = 'nightguide:home-cache:v1';
+const cacheKey = 'nightguide:home-cache:v2';
 
 type HomeCache = { events: NightEvent[]; venues: Venue[] };
 type DataContextValue = HomeCache & {
@@ -20,7 +21,7 @@ const DataContext = createContext<DataContextValue | null>(null);
 
 export function DataProvider({ children }: PropsWithChildren) {
   const [events, setEvents] = useState<NightEvent[]>(fallbackEvents);
-  const [venues, setVenues] = useState<Venue[]>(fallbackVenues);
+  const [venues, setVenues] = useState<Venue[]>(realVenues);
   const [source, setSource] = useState<DataContextValue['source']>('demo');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -30,7 +31,7 @@ export function DataProvider({ children }: PropsWithChildren) {
     try {
       if (!supabase) {
         setEvents(fallbackEvents);
-        setVenues(fallbackVenues);
+        setVenues(realVenues);
         setSource('demo');
         return;
       }
@@ -56,7 +57,7 @@ export function DataProvider({ children }: PropsWithChildren) {
       const nextVenues = (venuesResult.data || []).map(mapVenue).filter((venue): venue is Venue => Boolean(venue));
       const data = {
         events: nextEvents.length ? nextEvents : fallbackEvents,
-        venues: nextVenues.length ? nextVenues : fallbackVenues,
+        venues: nextVenues.length ? nextVenues : realVenues,
       };
       setEvents(data.events);
       setVenues(data.venues);
@@ -71,7 +72,7 @@ export function DataProvider({ children }: PropsWithChildren) {
         setSource('cache');
       } else {
         setEvents(fallbackEvents);
-        setVenues(fallbackVenues);
+        setVenues(realVenues);
         setSource('demo');
       }
     } finally {
