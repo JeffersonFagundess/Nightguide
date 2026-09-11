@@ -72,7 +72,7 @@ export function CommunityFeed() {
     {visiblePosts.map(review => <Pressable key={`${review.userId}-${review.id}`} style={styles.post}
       accessibilityRole="button" onPress={() => router.push({ pathname: '/venue/[id]', params: { id: review.venueId } })}>
       <Text style={styles.author}>{review.authorName}</Text>
-      {review.isDemo ? <Text style={styles.stars}>{pt ? 'DEMONSTRAÇÃO · FOTO ILUSTRATIVA, NÃO É DO LOCAL' : 'DEMO · ILLUSTRATIVE PHOTO, NOT THIS VENUE'}</Text> : null}
+      {review.isDemo ? <Text style={styles.stars}>{pt ? 'DEMONSTRAÇÃO · FOTO DO LOCAL FORNECIDA PELO PROJETO' : 'DEMO · VENUE PHOTO PROVIDED BY THE PROJECT'}</Text> : null}
       <Text style={styles.hint}>📍 {venues.find(venue => venue.id === review.venueId)?.name}</Text>
       <Text style={styles.comment}>{review.comment}</Text>
       {review.photoAsset || review.photoUri || review.photoUrl ? <PostImage source={review.photoAsset || { uri: review.photoUri || review.photoUrl }} rounded /> : null}
@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
   post: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, borderRadius: 18, padding: 16, gap: 9 },
   author: { color: colors.text, fontSize: 16, fontWeight: '800' },
   comment: { color: colors.text, lineHeight: 23, fontSize: 15 },
-  stars: { color: colors.accent, fontSize: 13 },
+  stars: { color: colors.accent, fontSize: 12, lineHeight: 17, flexShrink: 1 },
   moreButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 15, borderWidth: 1, borderColor: colors.accent, backgroundColor: 'rgba(226,255,84,0.08)' },
   moreButtonText: { color: colors.accent, fontSize: 13, fontWeight: '900' },
 });

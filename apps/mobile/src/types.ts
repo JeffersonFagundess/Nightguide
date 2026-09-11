@@ -29,6 +29,7 @@ export type Venue = {
   vibe: string;
   coverUrl?: string;
   coverAsset?: number;
+  galleryAssets?: number[];
   photoCredit?: string;
   photoSource?: string;
   photoIllustrative?: boolean;

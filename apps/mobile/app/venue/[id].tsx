@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { MapPin, MessageSquare, RefreshCw, Star, UserRound } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/src/components/button';
 import { PostImage } from '@/src/components/post-image';
@@ -35,7 +35,7 @@ export default function VenueProfileScreen() {
   const loadReviews = useCallback(async (manual = false) => {
     if (!venueId) return;
     if (manual) setRefreshing(true);
-    const cacheKey = `nightguide:venue-reviews:v2:${venueId}`;
+    const cacheKey = `nightguide:venue-reviews:v3:${venueId}`;
     const demoReviews = getDemoReviews(venue?.name);
 
     try {
@@ -99,7 +99,7 @@ export default function VenueProfileScreen() {
       {venue.coverAsset || venue.coverUrl ? <Image source={venue.coverAsset || { uri: venue.coverUrl }} resizeMode="cover" style={styles.cover} /> : <View style={styles.coverFallback}><MapPin size={36} color={colors.accent} /></View>}
       <Text style={styles.eyebrow}>{t.profile}</Text>
       {venue.photoCredit ? <Text style={styles.meta} onPress={() => { if (venue.photoSource) void Linking.openURL(venue.photoSource).catch(() => undefined); }}>{venue.photoCredit} · {t.source}</Text> : null}
-      {venue.photoIllustrative === false ? <Text style={styles.meta} onPress={() => void Linking.openURL('https://creativecommons.org/licenses/by-sa/3.0/').catch(() => undefined)}>{t.historicalPhoto}</Text> : null}
+      {venue.photoIllustrative === false && venue.photoSource?.includes('wikimedia.org') ? <Text style={styles.meta} onPress={() => void Linking.openURL('https://creativecommons.org/licenses/by-sa/3.0/').catch(() => undefined)}>{t.historicalPhoto}</Text> : null}
       <Text style={styles.title}>{venue.name}</Text>
       <View style={styles.metaRow}>
         <MapPin size={15} color={colors.accent} />
@@ -111,6 +111,27 @@ export default function VenueProfileScreen() {
         <Text style={styles.score}>{venue.rating.toFixed(1)}</Text>
         <Text style={styles.scoreLabel}>{publications.length} {publications.length === 1 ? t.post : t.posts}</Text>
       </View>
+
+      {venue.galleryAssets?.length ? (
+        <View style={styles.gallerySection}>
+          <Text style={styles.sectionEyebrow}>{t.gallery}</Text>
+          <Text style={styles.galleryTitle}>{t.galleryTitle} ({venue.galleryAssets.length})</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.galleryContent}>
+            {venue.galleryAssets.map((asset, index) => (
+              <Image
+                key={`${venue.id}-gallery-${index}`}
+                accessibilityLabel={`${t.galleryImage} ${index + 1}`}
+                source={asset}
+                resizeMode="cover"
+                style={styles.galleryImage}
+              />
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
 
       <View style={styles.sectionHeading}>
         <View>
@@ -178,13 +199,20 @@ export default function VenueProfileScreen() {
           : router.push({ pathname: '/auth/login', params: { next: `/venue/${venueId}` } })}
         style={styles.publishButton}
       />
+      <Button
+        label={t.openMap}
+        icon={MapPin}
+        variant="secondary"
+        onPress={() => router.push({ pathname: '/(tabs)/map', params: { venueId: venue.id } })}
+        style={styles.mapButton}
+      />
     </Screen>
   );
 }
 
 const venueCopy = {
-  pt: { notFound: 'Local não encontrado', notFoundText: 'Esse estabelecimento não está disponível no momento.', back: 'Voltar ao mapa', profile: 'PERFIL DO ESTABELECIMENTO', source: 'Ver fonte', historicalPhoto: 'Foto histórica sem edição · Licença CC BY-SA 3.0', post: 'publicação', posts: 'publicações', community: 'COMUNIDADE', peoplePosted: 'O que as pessoas publicaram', refresh: 'Atualizar publicações', loading: 'Carregando publicações…', demoPhoto: 'DEMONSTRAÇÃO · FOTO ILUSTRATIVA, NÃO É DO LOCAL', noPosts: 'Ainda não há publicações', noPostsText: 'Seja a primeira pessoa a contar como foi a experiência neste local.', createPost: 'Criar publicação', signInPost: 'Entrar para publicar', publishPhoto: 'Publicar comentário com foto', moreReviews: 'Ver mais avaliações', onlyFive: 'Mostrar apenas 5' },
-  en: { notFound: 'Venue not found', notFoundText: 'This venue is not available right now.', back: 'Back to map', profile: 'VENUE PROFILE', source: 'View source', historicalPhoto: 'Unedited historical photo · CC BY-SA 3.0 license', post: 'post', posts: 'posts', community: 'COMMUNITY', peoplePosted: 'What visitors posted', refresh: 'Refresh posts', loading: 'Loading posts…', demoPhoto: 'DEMO · ILLUSTRATIVE PHOTO, NOT THIS VENUE', noPosts: 'No posts yet', noPostsText: 'Be the first person to share an experience at this venue.', createPost: 'Create post', signInPost: 'Sign in to post', publishPhoto: 'Post a review with photo', moreReviews: 'See more reviews', onlyFive: 'Show only 5' },
+  pt: { notFound: 'Local não encontrado', notFoundText: 'Esse estabelecimento não está disponível no momento.', back: 'Voltar ao mapa', profile: 'PERFIL DO ESTABELECIMENTO', source: 'Ver fonte', historicalPhoto: 'Foto histórica sem edição · Licença CC BY-SA 3.0', post: 'publicação', posts: 'publicações', gallery: 'GALERIA', galleryTitle: 'Fotos do local', galleryImage: 'Foto do local', community: 'COMUNIDADE', peoplePosted: 'O que as pessoas publicaram', refresh: 'Atualizar publicações', loading: 'Carregando publicações…', demoPhoto: 'DEMONSTRAÇÃO · FOTO DO LOCAL FORNECIDA PELO PROJETO', noPosts: 'Ainda não há publicações', noPostsText: 'Seja a primeira pessoa a contar como foi a experiência neste local.', createPost: 'Criar publicação', signInPost: 'Entrar para publicar', publishPhoto: 'Publicar comentário com foto', moreReviews: 'Ver mais avaliações', onlyFive: 'Mostrar apenas 5', openMap: 'Ver endereço exato no mapa' },
+  en: { notFound: 'Venue not found', notFoundText: 'This venue is not available right now.', back: 'Back to map', profile: 'VENUE PROFILE', source: 'View source', historicalPhoto: 'Unedited historical photo · CC BY-SA 3.0 license', post: 'post', posts: 'posts', gallery: 'GALLERY', galleryTitle: 'Venue photos', galleryImage: 'Venue photo', community: 'COMMUNITY', peoplePosted: 'What visitors posted', refresh: 'Refresh posts', loading: 'Loading posts…', demoPhoto: 'DEMO · VENUE PHOTO PROVIDED BY THE PROJECT', noPosts: 'No posts yet', noPostsText: 'Be the first person to share an experience at this venue.', createPost: 'Create post', signInPost: 'Sign in to post', publishPhoto: 'Post a review with photo', moreReviews: 'See more reviews', onlyFive: 'Show only 5', openMap: 'View exact address on map' },
 } as const;
 
 const styles = StyleSheet.create({
@@ -199,6 +227,10 @@ const styles = StyleSheet.create({
   scoreCard: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 17, padding: 14, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   score: { color: colors.text, fontSize: 20, fontWeight: '900' },
   scoreLabel: { color: colors.muted, fontSize: 12, marginLeft: 4 },
+  gallerySection: { marginTop: 24 },
+  galleryTitle: { color: colors.text, fontSize: 21, fontWeight: '900', marginTop: 5, marginBottom: 12 },
+  galleryContent: { gap: 10, paddingRight: 18 },
+  galleryImage: { width: 250, height: 170, borderRadius: 16, backgroundColor: colors.elevated },
   sectionHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 28, marginBottom: 14 },
   sectionEyebrow: { color: colors.accent, fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
   sectionTitle: { color: colors.text, fontSize: 21, fontWeight: '900', marginTop: 5 },
@@ -219,6 +251,7 @@ const styles = StyleSheet.create({
   ratingMuted: { color: colors.border },
   exampleLabel: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
   publishButton: { marginTop: 18 },
+  mapButton: { marginTop: 10 },
   moreButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 15, borderWidth: 1, borderColor: colors.accent, backgroundColor: 'rgba(226,255,84,0.08)' },
   moreButtonText: { color: colors.accent, fontSize: 13, fontWeight: '900' },
 });

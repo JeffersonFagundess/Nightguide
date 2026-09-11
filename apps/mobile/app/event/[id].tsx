@@ -38,7 +38,12 @@ export default function EventDetailScreen() {
 
   async function openRoute() {
     if (event?.latitude == null || event.longitude == null) return;
-    await openExactDirections({ latitude: event.latitude, longitude: event.longitude });
+    await openExactDirections({
+      latitude: event.latitude,
+      longitude: event.longitude,
+      label: event.venue,
+      address: venue?.address,
+    });
   }
 
   function buy() {

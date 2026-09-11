@@ -77,13 +77,14 @@ const examples: Record<string, Review[]> = {
 export function getDemoReviews(venueName: string | undefined): Review[] {
   const venue = realVenues.find(item => item.name === venueName);
   if (venue) {
-    const photoAsset = venuePhoto(venue.name, venue.category).coverAsset;
+    const photos = venuePhoto(venue.name, venue.category);
+    const postPhotos = photos.galleryAssets?.length ? photos.galleryAssets : [photos.coverAsset];
     return [0, 1].map(index => ({
     id: `demo-${venue.id}-${index}`, userId: `demo-visitor-${index}`, venueId: venue.id, venue: venue.name,
     rating: index === 0 ? 5 : 4, createdAt: '2026-09-10T12:00:00.000Z',
     authorName: index === 0 ? 'Camila (personagem de exemplo)' : 'Rafael (personagem de exemplo)',
     comment: index === 0 ? 'Exemplo de publicação: aqui você pode contar como foi seu passeio, avaliar e compartilhar uma foto.' : 'Exemplo de avaliação: seu comentário pode ser salvo offline e enviado quando a conexão voltar.',
-    photoAsset,
+    photoAsset: postPhotos[index % postPhotos.length],
     isDemo: true,
     }));
   }
