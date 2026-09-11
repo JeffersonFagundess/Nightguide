@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/src/components/button';
+import { PostImage } from '@/src/components/post-image';
 import { Screen } from '@/src/components/screen';
 import { EmptyState, LoadingState } from '@/src/components/state';
 import { isUuid, readJson, writeJson } from '@/src/lib/storage';
@@ -134,7 +135,7 @@ export default function VenueProfileScreen() {
                 <Text style={styles.date}>{new Date(review.createdAt).toLocaleDateString(language === 'pt' ? 'pt-BR' : 'en-US')}</Text>
               </View>
               <Text style={styles.postDescription}>{review.comment}</Text>
-              {review.photoAsset || review.photoUri || review.photoUrl ? <Image source={review.photoAsset || { uri: review.photoUri || review.photoUrl }} resizeMode="cover" style={styles.postImage} /> : null}
+              {review.photoAsset || review.photoUri || review.photoUrl ? <PostImage source={review.photoAsset || { uri: review.photoUri || review.photoUrl }} /> : null}
               <View style={styles.postFooter}>
                 <View style={styles.footerLeft}>
                   <Text style={styles.rating}>{'★'.repeat(review.rating)}<Text style={styles.ratingMuted}>{'★'.repeat(5 - review.rating)}</Text></Text>
@@ -212,7 +213,6 @@ const styles = StyleSheet.create({
   venueLine: { color: colors.muted, fontSize: 12, marginTop: 2 },
   date: { color: colors.muted, fontSize: 10 },
   postDescription: { color: colors.text, fontSize: 14, lineHeight: 21, paddingHorizontal: 13, paddingBottom: 13 },
-  postImage: { width: '100%', aspectRatio: 4 / 3, backgroundColor: colors.elevated },
   postFooter: { padding: 13 },
   footerLeft: { gap: 5 },
   rating: { color: colors.accent, letterSpacing: 1 },

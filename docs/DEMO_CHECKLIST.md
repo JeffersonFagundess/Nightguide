@@ -4,7 +4,7 @@ Este roteiro cobre os oito itens exigidos para a apresentação do NightGuide.
 
 ## 1. Aplicativo executando
 
-1. Instale o arquivo `NightGuide-1.1.1-arm64.apk` no Android ARM64.
+1. Instale o arquivo `NightGuide-1.1.2-arm64.apk` no Android ARM64.
 2. Abra o aplicativo e mostre as abas Descobrir, Mapa, Ingressos e Conta.
 3. Entre com uma conta normal de e-mail e senha.
 
@@ -77,7 +77,7 @@ Para baixar manualmente:
 
 1. Abra o repositório no GitHub.
 2. Entre em **Releases** e abra a versão mais recente.
-3. Em **Assets**, baixe `NightGuide-1.1.1-arm64.apk`. O mesmo binário também fica disponível como artefato `NightGuide-Android-APK` na execução correspondente do GitHub Actions.
+3. Em **Assets**, baixe `NightGuide-1.1.2-arm64.apk`. O mesmo binário também fica disponível como artefato `NightGuide-Android-APK` na execução correspondente do GitHub Actions.
 4. Extraia o ZIP e instale `app-release.apk`.
 
 Também é possível gerar pelo EAS com `pnpm build:apk`, após executar `eas login` uma vez.

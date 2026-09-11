@@ -1,6 +1,6 @@
 import { Search, SlidersHorizontal } from 'lucide-react-native';
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { CommunityFeed } from '@/src/components/community-feed';
 
@@ -24,6 +24,7 @@ export default function DiscoveryScreen() {
   const { favoriteIds, toggleFavorite } = useUserData();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
+  const [visibleVenueCount, setVisibleVenueCount] = useState(5);
   const { language } = usePreferences();
   const { width: windowWidth } = useWindowDimensions();
   const t = copy[language];
@@ -36,6 +37,15 @@ export default function DiscoveryScreen() {
       return (!term || searchable.includes(term)) && matchesFilter(event, filter);
     });
   }, [events, filter, query]);
+
+  const filteredVenues = useMemo(() => {
+    const term = normalize(query);
+    return venues.filter(venue => !term || normalize(`${venue.name} ${venue.category} ${venue.address}`).includes(term));
+  }, [query, venues]);
+
+  useEffect(() => {
+    setVisibleVenueCount(5);
+  }, [query]);
 
   return (
     <View style={styles.screen}>
@@ -102,7 +112,7 @@ export default function DiscoveryScreen() {
 
         <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>{t.explore}</Text></View>
         <View style={styles.eventList}>
-          {venues.filter(venue => !query || normalize(`${venue.name} ${venue.category} ${venue.address}`).includes(normalize(query))).map(venue => (
+          {filteredVenues.slice(0, visibleVenueCount).map(venue => (
             <Pressable key={venue.id} style={styles.venueCard} accessibilityRole="button"
               onPress={() => router.push({ pathname: '/venue/[id]', params: { id: venue.id } })}>
               {venue.coverAsset || venue.coverUrl ? <Image source={venue.coverAsset || { uri: venue.coverUrl }} resizeMode="cover" style={styles.venueImage} /> : <Text style={styles.venueIcon}>📍</Text>}
@@ -114,6 +124,18 @@ export default function DiscoveryScreen() {
               </View>
             </Pressable>
           ))}
+          {filteredVenues.length > 5 ? (
+            <Pressable
+              accessibilityRole="button"
+              style={styles.moreButton}
+              onPress={() => setVisibleVenueCount(current => current < filteredVenues.length ? Math.min(current + 5, filteredVenues.length) : 5)}>
+              <Text style={styles.moreButtonText}>
+                {visibleVenueCount < filteredVenues.length
+                  ? `${t.moreVenues} (${Math.min(5, filteredVenues.length - visibleVenueCount)})`
+                  : t.onlyFiveVenues}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
         <CommunityFeed />
 
@@ -152,6 +174,8 @@ const copy = {
     explore: 'Explore Saquarema',
     illustrative: 'Imagem ilustrativa',
     profile: 'VER PERFIL E AVALIAÇÕES →',
+    moreVenues: 'Ver mais estabelecimentos',
+    onlyFiveVenues: 'Mostrar apenas 5 estabelecimentos',
     filters: { all: 'Tudo', free: 'Grátis', live: 'Ao vivo', beach: 'Praia', near: 'Perto' },
   },
   en: {
@@ -167,6 +191,8 @@ const copy = {
     explore: 'Explore Saquarema',
     illustrative: 'Illustrative image',
     profile: 'PROFILE AND REVIEWS →',
+    moreVenues: 'See more venues',
+    onlyFiveVenues: 'Show only 5 venues',
     filters: { all: 'All', free: 'Free', live: 'Live', beach: 'Beach', near: 'Nearby' },
   },
 } as const;
@@ -208,4 +234,6 @@ const styles = StyleSheet.create({
   count: { color: colors.muted, fontSize: 13, fontWeight: '800' },
   featuredList: { paddingLeft: 18, paddingRight: 18 },
   eventList: { paddingHorizontal: 18, gap: 14 },
+  moreButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 15, borderWidth: 1, borderColor: colors.accent, backgroundColor: 'rgba(226,255,84,0.08)', paddingHorizontal: 14 },
+  moreButtonText: { color: colors.accent, fontSize: 13, fontWeight: '900', textAlign: 'center' },
 });

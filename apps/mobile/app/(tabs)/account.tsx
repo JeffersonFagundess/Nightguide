@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Camera, Heart, Image as ImageIcon, LogOut, MessageSquare, Pencil, QrCode, Store, Ticket, Trash2, UserRound, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Brand } from '@/src/components/brand';
 import { Button } from '@/src/components/button';
@@ -10,6 +10,7 @@ import { FormField } from '@/src/components/form-field';
 import { LanguageSwitch } from '@/src/components/language-switch';
 import { Screen } from '@/src/components/screen';
 import { LoadingState } from '@/src/components/state';
+import { PostImage } from '@/src/components/post-image';
 import { deletePersistedReviewPhoto, persistReviewPhoto, type LocalReviewPhoto } from '@/src/lib/review-media';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useNightData } from '@/src/providers/data-provider';
@@ -192,7 +193,7 @@ export default function AccountScreen() {
         </View>
         {photo?.uri || existingPhotoUrl ? (
           <View style={styles.previewWrap}>
-            <Image source={{ uri: photo?.uri || existingPhotoUrl }} resizeMode="cover" style={styles.preview} />
+            <PostImage source={{ uri: photo?.uri || existingPhotoUrl }} rounded />
             <Pressable accessibilityLabel={t.removePhoto} onPress={removePhoto} style={styles.removePhoto}><Trash2 size={18} color={colors.text} /></Pressable>
           </View>
         ) : null}
@@ -216,7 +217,7 @@ export default function AccountScreen() {
               </View>
               <Text style={styles.postDescription}>{review.comment}</Text>
               {review.photoUri || review.photoUrl ? (
-                <Image source={{ uri: review.photoUri || review.photoUrl }} resizeMode="cover" style={styles.postImage} />
+                <PostImage source={{ uri: review.photoUri || review.photoUrl }} />
               ) : null}
               <View style={styles.postFooter}>
                 <Text style={styles.postRating}>{'★'.repeat(review.rating)}<Text style={styles.postRatingMuted}>{'★'.repeat(5 - review.rating)}</Text></Text>
@@ -289,7 +290,6 @@ const styles = StyleSheet.create({
   mediaActions: { flexDirection: 'row', gap: 10 },
   mediaButton: { flex: 1 },
   previewWrap: { position: 'relative' },
-  preview: { width: '100%', aspectRatio: 4 / 3, borderRadius: 15, backgroundColor: colors.elevated },
   removePhoto: { position: 'absolute', top: 9, right: 9, width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(9,9,11,0.82)' },
   submit: { marginTop: 2 },
   post: { overflow: 'hidden', borderWidth: 1, borderColor: colors.border, borderRadius: 17, backgroundColor: colors.background },
@@ -300,7 +300,6 @@ const styles = StyleSheet.create({
   postVenue: { color: colors.muted, fontSize: 12, marginTop: 2 },
   editPost: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.elevated },
   postDescription: { color: colors.text, fontSize: 14, lineHeight: 21, paddingHorizontal: 13, paddingBottom: 13 },
-  postImage: { width: '100%', aspectRatio: 4 / 3, backgroundColor: colors.elevated },
   postFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 13 },
   postRating: { color: colors.accent, letterSpacing: 1 },
   postRatingMuted: { color: colors.border },

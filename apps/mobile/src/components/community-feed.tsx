@@ -1,7 +1,7 @@
 import { router, useFocusEffect } from 'expo-router';
 import * as Network from 'expo-network';
 import { useCallback, useMemo, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { readJson, writeJson } from '@/src/lib/storage';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/providers/auth-provider';
@@ -11,6 +11,7 @@ import { useUserData } from '@/src/providers/user-data-provider';
 import { colors } from '@/src/theme';
 import type { Review } from '@/src/types';
 import { getDemoReviews } from '@/src/data/demo-reviews';
+import { PostImage } from '@/src/components/post-image';
 
 const cacheKey = 'nightguide:public-feed:v2';
 
@@ -74,7 +75,7 @@ export function CommunityFeed() {
       {review.isDemo ? <Text style={styles.stars}>{pt ? 'DEMONSTRAÇÃO · FOTO ILUSTRATIVA, NÃO É DO LOCAL' : 'DEMO · ILLUSTRATIVE PHOTO, NOT THIS VENUE'}</Text> : null}
       <Text style={styles.hint}>📍 {venues.find(venue => venue.id === review.venueId)?.name}</Text>
       <Text style={styles.comment}>{review.comment}</Text>
-      {review.photoAsset || review.photoUri || review.photoUrl ? <Image source={review.photoAsset || { uri: review.photoUri || review.photoUrl }} resizeMode="cover" style={styles.photo} /> : null}
+      {review.photoAsset || review.photoUri || review.photoUrl ? <PostImage source={review.photoAsset || { uri: review.photoUri || review.photoUrl }} rounded /> : null}
       <Text style={styles.stars}>{'★'.repeat(Math.max(0, Math.min(5, Math.round(review.rating))))} · {new Date(review.createdAt).toLocaleDateString(pt ? 'pt-BR' : 'en-US')}</Text>
     </Pressable>)}
     {allPosts.length > 5 ? (
@@ -98,7 +99,6 @@ const styles = StyleSheet.create({
   post: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, borderRadius: 18, padding: 16, gap: 9 },
   author: { color: colors.text, fontSize: 16, fontWeight: '800' },
   comment: { color: colors.text, lineHeight: 23, fontSize: 15 },
-  photo: { width: '100%', aspectRatio: 4 / 3, backgroundColor: colors.background, borderRadius: 12 },
   stars: { color: colors.accent, fontSize: 13 },
   moreButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 15, borderWidth: 1, borderColor: colors.accent, backgroundColor: 'rgba(226,255,84,0.08)' },
   moreButtonText: { color: colors.accent, fontSize: 13, fontWeight: '900' },

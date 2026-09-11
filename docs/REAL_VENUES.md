@@ -18,10 +18,12 @@ Fotografias históricas, sem edição do arquivo original; exibição dimensiona
 
 Demais capas: imagens ilustrativas do Unsplash por categoria, com aviso visível. Licença: https://unsplash.com/license. Não são fotografias dos estabelecimentos e não indicam parceria.
 
-## Versão Android 1.1.1
+## Versão Android 1.1.2
 
 O mapa usa OpenStreetMap dentro de WebView, sem exigir chave Google Maps no APK. Seleção de local muda o marcador; Traçar rota abre o serviço externo. As ruas exigem internet. Catálogo, textos e capas dos locais ficam disponíveis offline; fotos de publicações remotas dependem do cache do dispositivo.
 
 As capas do catálogo são empacotadas no APK para carregarem sem depender de servidores externos e permanecerem visíveis offline. A barra de navegação respeita a área segura dos gestos/botões do Android. O carrossel de destaques usa a largura útil da tela e encaixa um cartão completo por vez.
 
 O botão de rota envia ao Google Maps as coordenadas GPS armazenadas, com navegação nativa no Android e fallback pelo navegador. As avaliações aparecem em lotes de cinco, com controle para mostrar mais ou recolher. O cabeçalho oferece temas Escuro/Claro persistentes e o seletor PT-BR/EN traduz a navegação e as principais telas do fluxo do usuário.
+
+As fotos das publicações usam altura responsiva limitada para não ocuparem a tela inteira em celulares. A lista Explore Saquarema mostra cinco estabelecimentos inicialmente e oferece controles para carregar mais cinco ou recolher novamente.
