@@ -1,7 +1,8 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { MapPin, MessageSquare, RefreshCw, Star, UserRound } from 'lucide-react-native';
+import { MapPin, MessageSquare, RefreshCw, Star, UserRound, X } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/src/components/button';
 import { PostImage } from '@/src/components/post-image';
@@ -19,6 +20,7 @@ import type { Review } from '@/src/types';
 import { localizeVenueCategory, localizeVenueDescription } from '@/src/lib/i18n';
 
 export default function VenueProfileScreen() {
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const params = useLocalSearchParams<{ id: string }>();
   const venueId = Array.isArray(params.id) ? params.id[0] : params.id;
   const { venues } = useNightData();
@@ -31,6 +33,7 @@ export default function VenueProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [visibleCount, setVisibleCount] = useState(5);
+  const [selectedGalleryIndex, setSelectedGalleryIndex] = useState<number | null>(null);
 
   const loadReviews = useCallback(async (manual = false) => {
     if (!venueId) return;
@@ -115,23 +118,60 @@ export default function VenueProfileScreen() {
       {venue.galleryAssets?.length ? (
         <View style={styles.gallerySection}>
           <Text style={styles.sectionEyebrow}>{t.gallery}</Text>
-          <Text style={styles.galleryTitle}>{t.galleryTitle} ({venue.galleryAssets.length})</Text>
+          <Text style={styles.galleryTitle}>{t.galleryTitle}</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.galleryContent}>
             {venue.galleryAssets.map((asset, index) => (
-              <Image
+              <Pressable
                 key={`${venue.id}-gallery-${index}`}
+                accessibilityRole="button"
                 accessibilityLabel={`${t.galleryImage} ${index + 1}`}
-                source={asset}
-                resizeMode="cover"
-                style={styles.galleryImage}
-              />
+                accessibilityHint={t.openPhoto}
+                onPress={() => setSelectedGalleryIndex(index)}
+                style={({ pressed }) => [styles.galleryImageButton, pressed && styles.galleryImagePressed]}>
+                <Image source={asset} resizeMode="cover" style={styles.galleryImage} />
+              </Pressable>
             ))}
           </ScrollView>
         </View>
       ) : null}
+
+      <Modal
+        animationType="fade"
+        visible={selectedGalleryIndex !== null}
+        presentationStyle="fullScreen"
+        statusBarTranslucent
+        onRequestClose={() => setSelectedGalleryIndex(null)}>
+        <View style={styles.viewer}>
+          <FlatList
+            key={`gallery-viewer-${selectedGalleryIndex ?? 0}-${screenWidth}`}
+            data={venue.galleryAssets || []}
+            horizontal
+            pagingEnabled
+            initialScrollIndex={selectedGalleryIndex ?? 0}
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={(_, index) => `${venue.id}-fullscreen-${index}`}
+            getItemLayout={(_, index) => ({ length: screenWidth, offset: screenWidth * index, index })}
+            renderItem={({ item }) => (
+              <View style={[styles.viewerPage, { width: screenWidth, height: screenHeight }]}>
+                <Image source={item} resizeMode="contain" style={styles.viewerImage} />
+              </View>
+            )}
+          />
+          <SafeAreaView pointerEvents="box-none" edges={['top']} style={styles.viewerControls}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t.closePhoto}
+              hitSlop={10}
+              onPress={() => setSelectedGalleryIndex(null)}
+              style={({ pressed }) => [styles.viewerClose, pressed && styles.galleryImagePressed]}>
+              <X size={28} color="#FFFFFF" />
+            </Pressable>
+          </SafeAreaView>
+        </View>
+      </Modal>
 
       <View style={styles.sectionHeading}>
         <View>
@@ -211,8 +251,8 @@ export default function VenueProfileScreen() {
 }
 
 const venueCopy = {
-  pt: { notFound: 'Local não encontrado', notFoundText: 'Esse estabelecimento não está disponível no momento.', back: 'Voltar ao mapa', profile: 'PERFIL DO ESTABELECIMENTO', source: 'Ver fonte', historicalPhoto: 'Foto histórica sem edição · Licença CC BY-SA 3.0', post: 'publicação', posts: 'publicações', gallery: 'GALERIA', galleryTitle: 'Fotos do local', galleryImage: 'Foto do local', community: 'COMUNIDADE', peoplePosted: 'O que as pessoas publicaram', refresh: 'Atualizar publicações', loading: 'Carregando publicações…', demoPhoto: 'DEMONSTRAÇÃO · FOTO DO LOCAL FORNECIDA PELO PROJETO', noPosts: 'Ainda não há publicações', noPostsText: 'Seja a primeira pessoa a contar como foi a experiência neste local.', createPost: 'Criar publicação', signInPost: 'Entrar para publicar', publishPhoto: 'Publicar comentário com foto', moreReviews: 'Ver mais avaliações', onlyFive: 'Mostrar apenas 5', openMap: 'Ver endereço exato no mapa' },
-  en: { notFound: 'Venue not found', notFoundText: 'This venue is not available right now.', back: 'Back to map', profile: 'VENUE PROFILE', source: 'View source', historicalPhoto: 'Unedited historical photo · CC BY-SA 3.0 license', post: 'post', posts: 'posts', gallery: 'GALLERY', galleryTitle: 'Venue photos', galleryImage: 'Venue photo', community: 'COMMUNITY', peoplePosted: 'What visitors posted', refresh: 'Refresh posts', loading: 'Loading posts…', demoPhoto: 'DEMO · VENUE PHOTO PROVIDED BY THE PROJECT', noPosts: 'No posts yet', noPostsText: 'Be the first person to share an experience at this venue.', createPost: 'Create post', signInPost: 'Sign in to post', publishPhoto: 'Post a review with photo', moreReviews: 'See more reviews', onlyFive: 'Show only 5', openMap: 'View exact address on map' },
+  pt: { notFound: 'Local não encontrado', notFoundText: 'Esse estabelecimento não está disponível no momento.', back: 'Voltar ao mapa', profile: 'PERFIL DO ESTABELECIMENTO', source: 'Ver fonte', historicalPhoto: 'Foto histórica sem edição · Licença CC BY-SA 3.0', post: 'publicação', posts: 'publicações', gallery: 'GALERIA', galleryTitle: 'Fotos do local', galleryImage: 'Foto do local', openPhoto: 'Abre a foto em tela cheia', closePhoto: 'Fechar foto', community: 'COMUNIDADE', peoplePosted: 'O que as pessoas publicaram', refresh: 'Atualizar publicações', loading: 'Carregando publicações…', demoPhoto: 'DEMONSTRAÇÃO · FOTO DO LOCAL FORNECIDA PELO PROJETO', noPosts: 'Ainda não há publicações', noPostsText: 'Seja a primeira pessoa a contar como foi a experiência neste local.', createPost: 'Criar publicação', signInPost: 'Entrar para publicar', publishPhoto: 'Publicar comentário com foto', moreReviews: 'Ver mais avaliações', onlyFive: 'Mostrar apenas 5', openMap: 'Ver endereço exato no mapa' },
+  en: { notFound: 'Venue not found', notFoundText: 'This venue is not available right now.', back: 'Back to map', profile: 'VENUE PROFILE', source: 'View source', historicalPhoto: 'Unedited historical photo · CC BY-SA 3.0 license', post: 'post', posts: 'posts', gallery: 'GALLERY', galleryTitle: 'Venue photos', galleryImage: 'Venue photo', openPhoto: 'Opens the photo full screen', closePhoto: 'Close photo', community: 'COMMUNITY', peoplePosted: 'What visitors posted', refresh: 'Refresh posts', loading: 'Loading posts…', demoPhoto: 'DEMO · VENUE PHOTO PROVIDED BY THE PROJECT', noPosts: 'No posts yet', noPostsText: 'Be the first person to share an experience at this venue.', createPost: 'Create post', signInPost: 'Sign in to post', publishPhoto: 'Post a review with photo', moreReviews: 'See more reviews', onlyFive: 'Show only 5', openMap: 'View exact address on map' },
 } as const;
 
 const styles = StyleSheet.create({
@@ -230,7 +270,14 @@ const styles = StyleSheet.create({
   gallerySection: { marginTop: 24 },
   galleryTitle: { color: colors.text, fontSize: 21, fontWeight: '900', marginTop: 5, marginBottom: 12 },
   galleryContent: { gap: 10, paddingRight: 18 },
-  galleryImage: { width: 250, height: 170, borderRadius: 16, backgroundColor: colors.elevated },
+  galleryImageButton: { width: 250, height: 170, overflow: 'hidden', borderRadius: 16, backgroundColor: colors.elevated },
+  galleryImage: { width: '100%', height: '100%' },
+  galleryImagePressed: { opacity: 0.72 },
+  viewer: { flex: 1, backgroundColor: '#000000' },
+  viewerPage: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#000000' },
+  viewerImage: { width: '100%', height: '100%' },
+  viewerControls: { position: 'absolute', top: 0, right: 0, left: 0, zIndex: 2, alignItems: 'flex-end', paddingHorizontal: 16 },
+  viewerClose: { width: 48, height: 48, marginTop: 8, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(18,18,20,0.82)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' },
   sectionHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 28, marginBottom: 14 },
   sectionEyebrow: { color: colors.accent, fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
   sectionTitle: { color: colors.text, fontSize: 21, fontWeight: '900', marginTop: 5 },

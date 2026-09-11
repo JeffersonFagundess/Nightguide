@@ -14,7 +14,7 @@ As fotos reais foram fornecidas pelo responsável do projeto em pastas separadas
 
 As imagens ficam empacotadas no APK e não dependem de um servidor para serem exibidas. As capas genéricas antigas continuam somente como fallback para um estabelecimento futuro que ainda não tenha uma pasta própria.
 
-## Versão Android 1.1.3
+## Versão Android 1.1.4
 
 O mapa usa OpenStreetMap dentro de WebView, sem exigir chave Google Maps no APK. Seleção de local muda o marcador; Traçar rota abre o serviço externo. As ruas exigem internet. Catálogo, textos e capas dos locais ficam disponíveis offline; fotos de publicações remotas dependem do cache do dispositivo.
 
@@ -27,3 +27,5 @@ As fotos das publicações usam altura responsiva limitada para não ocuparem a 
 O mapa aproxima o quarteirão e centraliza o marcador nas coordenadas verificadas do estabelecimento. O perfil oferece ações separadas para abrir o ponto exato e para iniciar a rota; ao entrar no mapa por um perfil, o local correto já fica selecionado. Os 12 pontos de estabelecimentos foram reconferidos diretamente pela API do OpenStreetMap em 11/09/2026 e coincidem com os dados locais.
 
 Restaurante Marisco, Villa Bistrô e P22 também aparecem no carrossel como locais em destaque, sem inventar eventos ou horários. Os textos longos em inglês da busca, dos cartões e das mensagens de demonstração foram encurtados e receberam limites de quebra adequados para telas pequenas.
+
+As miniaturas da galeria abrem um visualizador em tela cheia. O usuário pode deslizar horizontalmente entre as imagens, fechar pelo botão superior ou usar o botão Voltar do Android; o título da galeria não exibe contagem.
