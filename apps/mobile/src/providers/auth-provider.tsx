@@ -5,8 +5,11 @@ import { createContext, type PropsWithChildren, useCallback, useContext, useEffe
 import { AppState, Platform } from 'react-native';
 
 import { env, hasSupabaseEnv } from '@/src/lib/env';
+import { isNetworkReachable, queueOfflineAction, syncOfflineActions } from '@/src/lib/offline-sync';
+import { readJson, scopedKey, writeJson } from '@/src/lib/storage';
 import { supabase } from '@/src/lib/supabase';
 import type { Profile, UserRole } from '@/src/types';
+import type { LocalReviewPhoto } from '@/src/lib/review-media';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -14,6 +17,12 @@ type RegisterInput = {
   name: string;
   email: string;
   password: string;
+};
+
+type UpdateProfileInput = {
+  fullName: string;
+  avatarPhoto?: LocalReviewPhoto;
+  avatarUrl?: string;
 };
 
 type AuthContextValue = {
@@ -26,6 +35,9 @@ type AuthContextValue = {
   login: (email: string, password: string) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<void>;
+  updatePassword: (password: string) => Promise<void>;
+  updateProfile: (input: UpdateProfileInput) => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 };
@@ -43,18 +55,36 @@ export function AuthProvider({ children }: PropsWithChildren) {
       return;
     }
 
+    const profileKey = scopedKey('nightguide:profile', user.id);
+    const cached = await readJson<Profile | null>(profileKey, null);
+    if (cached) setProfile(cached);
+
+    if (!(await isNetworkReachable())) {
+      if (!cached) {
+        setProfile({
+          id: user.id,
+          fullName: user.user_metadata?.full_name || user.email || 'NightGuide',
+          avatarUrl: user.user_metadata?.avatar_url || undefined,
+          role: normalizeRole(user.user_metadata?.role),
+        });
+      }
+      return;
+    }
+
     const { data } = await supabase
       .from('profiles')
       .select('id,full_name,avatar_url,role')
       .eq('id', user.id)
       .maybeSingle();
 
-    setProfile({
+    const nextProfile: Profile = {
       id: user.id,
-      fullName: data?.full_name || user.user_metadata?.full_name || user.email || 'NightGuide',
-      avatarUrl: data?.avatar_url || user.user_metadata?.avatar_url || undefined,
-      role: normalizeRole(data?.role || user.user_metadata?.role),
-    });
+      fullName: data?.full_name || cached?.fullName || user.user_metadata?.full_name || user.email || 'NightGuide',
+      avatarUrl: data?.avatar_url || cached?.avatarUrl || user.user_metadata?.avatar_url || undefined,
+      role: normalizeRole(data?.role || cached?.role || user.user_metadata?.role),
+    };
+    setProfile(nextProfile);
+    await writeJson(profileKey, nextProfile);
   }, []);
 
   useEffect(() => {
@@ -149,6 +179,57 @@ export function AuthProvider({ children }: PropsWithChildren) {
     throw new Error('O Google não retornou uma sessão válida.');
   }, []);
 
+  const requestPasswordReset = useCallback(async (email: string) => {
+    requireSupabase();
+    const redirectTo = makeRedirectUri({
+      scheme: 'nightguide',
+      path: 'auth/callback',
+      queryParams: { next: '/auth/reset-password' },
+    });
+    const { error } = await supabase!.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo });
+    if (error) throw error;
+  }, []);
+
+  const updatePassword = useCallback(async (password: string) => {
+    requireSupabase();
+    const { error } = await supabase!.auth.updateUser({ password });
+    if (error) throw error;
+  }, []);
+
+  const updateProfile = useCallback(async (input: UpdateProfileInput) => {
+    requireSupabase();
+    if (!session?.user) throw new Error('Entre na sua conta novamente.');
+    const fullName = input.fullName.trim();
+    if (fullName.length < 2) throw new Error('Digite um nome válido.');
+
+    const localProfile: Profile = {
+      id: session.user.id,
+      role: profile?.role || 'customer',
+      fullName,
+      avatarUrl: input.avatarPhoto?.uri || input.avatarUrl || profile?.avatarUrl,
+    };
+    setProfile(localProfile);
+    await writeJson(scopedKey('nightguide:profile', session.user.id), localProfile);
+
+    await queueOfflineAction({
+      type: 'profile_updated',
+      userId: session.user.id,
+      entityId: session.user.id,
+      payload: {
+        fullName,
+        avatarPhotoUri: input.avatarPhoto?.uri,
+        avatarMimeType: input.avatarPhoto?.mimeType,
+        avatarFileName: input.avatarPhoto?.fileName,
+        avatarUrl: input.avatarUrl,
+      },
+    });
+
+    if (await isNetworkReachable()) {
+      const result = await syncOfflineActions();
+      if (!result.failed) await loadProfile(session.user);
+    }
+  }, [loadProfile, profile?.avatarUrl, profile?.role, session?.user]);
+
   const logout = useCallback(async () => {
     if (!supabase) return;
     const { error } = await supabase.auth.signOut();
@@ -168,10 +249,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
       login,
       register,
       loginWithGoogle,
+      requestPasswordReset,
+      updatePassword,
+      updateProfile,
       logout,
       refreshProfile,
     }),
-    [login, loginWithGoogle, logout, profile, ready, refreshProfile, register, session],
+    [login, loginWithGoogle, logout, profile, ready, refreshProfile, register, requestPasswordReset, session, updatePassword, updateProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

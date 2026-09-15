@@ -32,16 +32,17 @@ A base Expo/React Native fica em `apps/mobile`. Ela convive com a versao web e i
 - Eventos em destaque com movimento de imagem, filtros e busca.
 - Mapa interativo com zoom controlado para nao atrapalhar o scroll da pagina.
 - Modal de detalhes de evento/local com fechamento por `Esc`.
-- Login e cadastro por email/senha com Supabase.
+- Login e cadastro por email/senha com validacao por campo, senha visivel/oculta e recuperacao de senha.
 - Login com Google via Supabase Auth.
-- Conta de cliente com favoritos, feedbacks e ingressos.
+- Conta de cliente em formato de painel, com foto/nome de perfil, favoritos, publicacoes e ingressos.
 - Conta de dono com edicao de perfil do estabelecimento e eventos locais.
 - Compra de ingresso teste por cartao, Pix visual e Checkout Pro.
 - Mensagem de pagamento confirmado dentro da tela.
 - PWA instalavel no celular e cache de paginas/imagens.
 - Idioma portugues/ingles e tema claro/escuro.
-- Favoritos, ingressos e publicacoes persistidos apos fechar/reabrir.
-- Fila offline com sincronizacao automatica ao voltar a internet.
+- Favoritos, ingressos, perfil, rascunhos e publicacoes persistidos apos fechar/reabrir.
+- Criacao, edicao e exclusao de publicacoes com fila offline e sincronizacao automatica ao voltar a internet.
+- Busca de estabelecimento no compositor, contador de texto e fotos abertas em tela cheia.
 - APK Android standalone gerado pelo GitHub Actions.
 
 ## Como rodar localmente

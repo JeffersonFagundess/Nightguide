@@ -9,7 +9,7 @@ import { colors } from '@/src/theme';
 import { usePreferences } from '@/src/providers/preferences-provider';
 
 export default function AuthCallbackScreen() {
-  const { code, error_description: errorDescription } = useLocalSearchParams<{ code?: string; error_description?: string }>();
+  const { code, error_description: errorDescription, next } = useLocalSearchParams<{ code?: string; error_description?: string; next?: string }>();
   const [error, setError] = useState('');
   const { language } = usePreferences();
   const pt = language === 'pt';
@@ -20,10 +20,10 @@ export default function AuthCallbackScreen() {
       if (!supabase || !code) throw new Error(pt ? 'Link de confirmação inválido ou expirado.' : 'Invalid or expired confirmation link.');
       const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
       if (exchangeError) throw exchangeError;
-      router.replace('/(tabs)/account');
+      router.replace((next === '/auth/reset-password' ? '/auth/reset-password' : '/(tabs)/account') as never);
     }
     void finish().catch((nextError) => setError(nextError instanceof Error ? nextError.message : (pt ? 'Falha na autenticação.' : 'Authentication failed.')));
-  }, [code, errorDescription, pt]);
+  }, [code, errorDescription, next, pt]);
 
   if (!error) return <LoadingState label={pt ? 'Confirmando sua conta…' : 'Confirming your account…'} />;
   return <Screen contentStyle={styles.content}><Text style={styles.title}>{pt ? 'Não foi possível confirmar' : 'Unable to confirm'}</Text><Text style={styles.text}>{error}</Text><Text onPress={() => router.replace('/auth/login')} style={styles.link}>{pt ? 'Voltar para o login' : 'Back to sign in'}</Text></Screen>;

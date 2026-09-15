@@ -81,6 +81,8 @@ export type OfflineActionType =
   | 'favorite_added'
   | 'favorite_removed'
   | 'review_created'
+  | 'review_deleted'
+  | 'profile_updated'
   | 'ticket_purchased'
   | 'ticket_cancelled';
 

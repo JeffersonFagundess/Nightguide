@@ -41,10 +41,18 @@ export async function queueOfflineAction(input: QueueInput) {
   const replaced = shouldReplaceEarlier(action) ? queue.filter((item) => isSameReplaceableAction(item, action)) : [];
   const next = shouldReplaceEarlier(action) ? queue.filter((item) => !isSameReplaceableAction(item, action)) : queue;
 
-  if (action.type === 'review_created') {
+  if (action.type === 'review_created' || action.type === 'review_deleted') {
     const nextPhotoUri = typeof action.payload.photoUri === 'string' ? action.payload.photoUri : undefined;
     replaced.forEach((item) => {
       const oldPhotoUri = typeof item.payload.photoUri === 'string' ? item.payload.photoUri : undefined;
+      if (oldPhotoUri && oldPhotoUri !== nextPhotoUri) deletePersistedReviewPhoto(oldPhotoUri);
+    });
+  }
+
+  if (action.type === 'profile_updated') {
+    const nextPhotoUri = typeof action.payload.avatarPhotoUri === 'string' ? action.payload.avatarPhotoUri : undefined;
+    replaced.forEach((item) => {
+      const oldPhotoUri = typeof item.payload.avatarPhotoUri === 'string' ? item.payload.avatarPhotoUri : undefined;
       if (oldPhotoUri && oldPhotoUri !== nextPhotoUri) deletePersistedReviewPhoto(oldPhotoUri);
     });
   }
@@ -173,6 +181,48 @@ async function sendAction(action: OfflineAction, userId: string): Promise<string
     return error?.message ?? null;
   }
 
+  if (action.type === 'review_deleted') {
+    const { error } = await supabase
+      .from('reviews')
+      .delete()
+      .eq('user_id', userId)
+      .eq('venue_id', action.entityId);
+    return error?.message ?? null;
+  }
+
+  if (action.type === 'profile_updated') {
+    const fullName = typeof action.payload.fullName === 'string' ? action.payload.fullName.trim() : '';
+    if (fullName.length < 2) return 'Nome do perfil inválido.';
+
+    const avatarPhotoUri = typeof action.payload.avatarPhotoUri === 'string' ? action.payload.avatarPhotoUri : undefined;
+    const avatarMimeType = typeof action.payload.avatarMimeType === 'string' ? action.payload.avatarMimeType : 'image/jpeg';
+    const avatarFileName = typeof action.payload.avatarFileName === 'string' ? action.payload.avatarFileName : undefined;
+    let avatarUrl = typeof action.payload.avatarUrl === 'string' ? action.payload.avatarUrl : null;
+
+    if (avatarPhotoUri) {
+      try {
+        const photo = await readReviewPhoto(avatarPhotoUri);
+        const extension = extensionFor(avatarMimeType, avatarFileName);
+        const storagePath = `${userId}/profile-avatar.${extension}`;
+        const { error: uploadError } = await supabase.storage.from('review-media').upload(storagePath, photo, {
+          contentType: avatarMimeType,
+          upsert: true,
+        });
+        if (uploadError) return uploadError.message;
+        avatarUrl = supabase.storage.from('review-media').getPublicUrl(storagePath).data.publicUrl;
+      } catch (error) {
+        return error instanceof Error ? error.message : 'Não foi possível preparar a foto do perfil.';
+      }
+    }
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ full_name: fullName, avatar_url: avatarUrl })
+      .eq('id', userId);
+    if (!error) await supabase.auth.updateUser({ data: { full_name: fullName, avatar_url: avatarUrl } });
+    return error?.message ?? null;
+  }
+
   if (action.type === 'ticket_purchased') {
     const quantity = Number(action.payload.quantity);
     const amount = Number(action.payload.totalAmount);
@@ -202,14 +252,20 @@ async function sendAction(action: OfflineAction, userId: string): Promise<string
 }
 
 function shouldReplaceEarlier(action: OfflineAction) {
-  return action.type === 'favorite_added' || action.type === 'favorite_removed' || action.type === 'review_created';
+  return action.type === 'favorite_added'
+    || action.type === 'favorite_removed'
+    || action.type === 'review_created'
+    || action.type === 'review_deleted'
+    || action.type === 'profile_updated';
 }
 
 function isSameReplaceableAction(current: OfflineAction, next: OfflineAction) {
   const favoriteTypes: OfflineActionType[] = ['favorite_added', 'favorite_removed'];
   const sameFavorite = favoriteTypes.includes(current.type) && favoriteTypes.includes(next.type);
-  const sameReview = current.type === 'review_created' && next.type === 'review_created';
-  return (sameFavorite || sameReview) && current.entityId === next.entityId && current.userId === next.userId;
+  const reviewTypes: OfflineActionType[] = ['review_created', 'review_deleted'];
+  const sameReview = reviewTypes.includes(current.type) && reviewTypes.includes(next.type);
+  const sameProfile = current.type === 'profile_updated' && next.type === 'profile_updated';
+  return (sameFavorite || sameReview || sameProfile) && current.entityId === next.entityId && current.userId === next.userId;
 }
 
 function emitQueueChange() {
@@ -247,7 +303,7 @@ export async function migrateLegacyOfflineQueue() {
 }
 
 function isOfflineActionType(type: unknown): type is OfflineActionType {
-  return ['favorite_added', 'favorite_removed', 'review_created', 'ticket_purchased', 'ticket_cancelled'].includes(
+  return ['favorite_added', 'favorite_removed', 'review_created', 'review_deleted', 'profile_updated', 'ticket_purchased', 'ticket_cancelled'].includes(
     String(type),
   );
 }

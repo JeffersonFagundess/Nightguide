@@ -60,6 +60,10 @@ function AppNavigation() {
                 <Stack.Screen name="auth/login" options={{ title: language === 'pt' ? 'Entrar' : 'Sign in', presentation: 'modal' }} />
                 <Stack.Screen name="auth/register" options={{ title: language === 'pt' ? 'Criar conta' : 'Create account', presentation: 'modal' }} />
                 <Stack.Screen name="auth/callback" options={{ title: language === 'pt' ? 'Autenticação' : 'Authentication' }} />
+                <Stack.Screen name="auth/reset-password" options={{ title: language === 'pt' ? 'Nova senha' : 'New password', presentation: 'modal' }} />
+                <Stack.Screen name="account/post" options={{ title: language === 'pt' ? 'Publicação' : 'Post', presentation: 'modal' }} />
+                <Stack.Screen name="account/edit-profile" options={{ title: language === 'pt' ? 'Editar perfil' : 'Edit profile', presentation: 'card' }} />
+                <Stack.Screen name="account/settings" options={{ title: language === 'pt' ? 'Configurações' : 'Settings', presentation: 'card' }} />
                 <Stack.Screen name="scanner" options={{ title: language === 'pt' ? 'Validar ingresso' : 'Validate ticket', presentation: 'fullScreenModal' }} />
                 <Stack.Screen name="owner" options={{ title: language === 'pt' ? 'Painel do estabelecimento' : 'Venue dashboard' }} />
               </Stack>

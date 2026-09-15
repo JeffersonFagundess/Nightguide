@@ -66,7 +66,9 @@ Credenciais de teste continuam obrigatorias. A simulacao local e rotulada como d
 - camera e galeria para capas de estabelecimento/evento
 - publicacoes por estabelecimento com descricao, nota e foto
 - camera e galeria para anexar fotos as publicacoes
-- criacao e edicao de publicacao offline, com envio automatico ao reconectar
+- criacao, edicao e exclusao de publicacao offline, com envio automatico ao reconectar
+- rascunho automatico, busca de estabelecimento e fotos em tela cheia
+- painel de conta com edicao de nome/foto, tema, idioma e recuperacao de senha
 - perfil publico do estabelecimento com comentarios de outras pessoas
 - cache local das publicacoes visitadas para leitura offline
 - upload de imagem para Supabase Storage, limitado a 6 MB e JPEG/PNG/WebP

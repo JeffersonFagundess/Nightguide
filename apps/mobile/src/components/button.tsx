@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react-native';
+import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, type ViewStyle } from 'react-native';
 
 import { colors } from '@/src/theme';
@@ -7,13 +8,14 @@ type Props = {
   label: string;
   onPress: () => void;
   icon?: LucideIcon;
+  leading?: ReactNode;
   loading?: boolean;
   disabled?: boolean;
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
   style?: ViewStyle;
 };
 
-export function Button({ label, onPress, icon: Icon, loading, disabled, variant = 'primary', style }: Props) {
+export function Button({ label, onPress, icon: Icon, leading, loading, disabled, variant = 'primary', style }: Props) {
   const blocked = loading || disabled;
   return (
     <Pressable
@@ -23,6 +25,8 @@ export function Button({ label, onPress, icon: Icon, loading, disabled, variant 
       style={({ pressed }) => [styles.base, styles[variant], blocked && styles.disabled, pressed && !blocked && styles.pressed, style]}>
       {loading ? (
         <ActivityIndicator color={variant === 'primary' ? colors.ink : colors.text} />
+      ) : leading ? (
+        leading
       ) : Icon ? (
         <Icon size={18} color={variant === 'primary' ? colors.ink : variant === 'danger' ? colors.rose : colors.text} />
       ) : null}

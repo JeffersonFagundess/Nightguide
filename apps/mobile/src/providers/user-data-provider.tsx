@@ -3,6 +3,7 @@ import { createContext, type PropsWithChildren, useCallback, useContext, useEffe
 
 import { scheduleEventReminder } from '@/src/lib/notifications';
 import { isNetworkReachable, queueOfflineAction, syncOfflineActions } from '@/src/lib/offline-sync';
+import { deletePersistedReviewPhoto } from '@/src/lib/review-media';
 import { isUuid, parsePrice, readJson, scopedKey, writeJson } from '@/src/lib/storage';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/providers/auth-provider';
@@ -17,6 +18,7 @@ type UserDataContextValue = {
   createTicket: (event: NightEvent, quantity: number, paymentLabel: string, provider?: Ticket['provider']) => Promise<Ticket>;
   cancelTicket: (ticketId: string) => Promise<void>;
   addReview: (input: Omit<Review, 'id' | 'createdAt'>) => Promise<Review>;
+  deleteReview: (reviewId: string) => Promise<void>;
 };
 
 const UserDataContext = createContext<UserDataContextValue | null>(null);
@@ -205,14 +207,16 @@ export function UserDataProvider({ children }: PropsWithChildren) {
 
   const addReview = useCallback(
     async (input: Omit<Review, 'id' | 'createdAt'>) => {
+      const previousReview = reviews.find((item) => item.venueId === input.venueId);
       const review: Review = {
         ...input,
-        id: reviews.find((item) => item.venueId === input.venueId)?.id ?? `review-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        id: previousReview?.id ?? `review-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         createdAt: new Date().toISOString(),
       };
       const next = [review, ...reviews.filter((item) => item.venueId !== review.venueId)];
       setReviews(next);
       await writeJson(scopedKey('nightguide:reviews', scope), next);
+      if (previousReview?.photoUri && previousReview.photoUri !== review.photoUri) deletePersistedReviewPhoto(previousReview.photoUri);
       if (user && supabase && isUuid(review.venueId)) {
         const queuedAction = {
           type: 'review_created' as const,
@@ -228,9 +232,31 @@ export function UserDataProvider({ children }: PropsWithChildren) {
     [reviews, scope, user],
   );
 
+  const deleteReview = useCallback(
+    async (reviewId: string) => {
+      const review = reviews.find((item) => item.id === reviewId);
+      if (!review) return;
+      const next = reviews.filter((item) => item.id !== reviewId);
+      setReviews(next);
+      await writeJson(scopedKey('nightguide:reviews', scope), next);
+      if (review.photoUri) deletePersistedReviewPhoto(review.photoUri);
+
+      if (user && supabase && isUuid(review.venueId)) {
+        await queueOfflineAction({
+          type: 'review_deleted',
+          userId: user.id,
+          entityId: review.venueId,
+          payload: { photoUrl: review.photoUrl },
+        });
+        if (await isNetworkReachable()) await syncOfflineActions();
+      }
+    },
+    [reviews, scope, user],
+  );
+
   const value = useMemo<UserDataContextValue>(
-    () => ({ ready, favoriteIds, tickets, reviews, toggleFavorite, createTicket, cancelTicket, addReview }),
-    [addReview, cancelTicket, createTicket, favoriteIds, ready, reviews, tickets, toggleFavorite],
+    () => ({ ready, favoriteIds, tickets, reviews, toggleFavorite, createTicket, cancelTicket, addReview, deleteReview }),
+    [addReview, cancelTicket, createTicket, deleteReview, favoriteIds, ready, reviews, tickets, toggleFavorite],
   );
 
   return <UserDataContext.Provider value={value}>{children}</UserDataContext.Provider>;
