@@ -1,14 +1,22 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Network from 'expo-network';
 
+import { mergeProfilePayload, withProfileCacheLock } from '@/src/lib/profile-data';
 import { deletePersistedReviewPhoto, extensionFor, readReviewPhoto } from '@/src/lib/review-media';
-import { isUuid, readJson, writeJson } from '@/src/lib/storage';
+import { isUuid, readJson, scopedKey, writeJson } from '@/src/lib/storage';
 import { supabase } from '@/src/lib/supabase';
-import type { OfflineAction, OfflineActionType } from '@/src/types';
+import type { OfflineAction, OfflineActionType, Profile } from '@/src/types';
 
 const queueKey = 'nightguide:offline-actions:v2';
 const listeners = new Set<() => void>();
 let activeSync: Promise<OfflineSyncResult> | null = null;
+let queueWrite: Promise<unknown> = Promise.resolve();
+
+function withQueueLock<T>(operation: () => Promise<T>): Promise<T> {
+  const task = queueWrite.then(operation, operation);
+  queueWrite = task.catch(() => undefined);
+  return task;
+}
 
 type QueueInput = Omit<OfflineAction, 'id' | 'createdAt' | 'attempts' | 'lastError'> & {
   id?: string;
@@ -30,35 +38,45 @@ export async function isNetworkReachable() {
 }
 
 export async function queueOfflineAction(input: QueueInput) {
-  const queue = await getOfflineActions();
-  const action: OfflineAction = {
-    ...input,
-    id: input.id ?? `action-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    createdAt: new Date().toISOString(),
-    attempts: 0,
-  };
+  return withQueueLock(async () => {
+    const queue = await getOfflineActions();
+    const action: OfflineAction = {
+      ...input,
+      id: input.id ?? `action-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      createdAt: new Date().toISOString(),
+      attempts: 0,
+    };
 
-  const replaced = shouldReplaceEarlier(action) ? queue.filter((item) => isSameReplaceableAction(item, action)) : [];
-  const next = shouldReplaceEarlier(action) ? queue.filter((item) => !isSameReplaceableAction(item, action)) : queue;
+    const replaced = shouldReplaceEarlier(action) ? queue.filter((item) => isSameReplaceableAction(item, action)) : [];
+    const next = shouldReplaceEarlier(action) ? queue.filter((item) => !isSameReplaceableAction(item, action)) : queue;
 
-  if (action.type === 'review_created' || action.type === 'review_deleted') {
-    const nextPhotoUri = typeof action.payload.photoUri === 'string' ? action.payload.photoUri : undefined;
-    replaced.forEach((item) => {
-      const oldPhotoUri = typeof item.payload.photoUri === 'string' ? item.payload.photoUri : undefined;
-      if (oldPhotoUri && oldPhotoUri !== nextPhotoUri) deletePersistedReviewPhoto(oldPhotoUri);
-    });
-  }
+    if (action.type === 'review_created' || action.type === 'review_deleted') {
+      const nextPhotoUri = typeof action.payload.photoUri === 'string' ? action.payload.photoUri : undefined;
+      replaced.forEach((item) => {
+        const oldPhotoUri = typeof item.payload.photoUri === 'string' ? item.payload.photoUri : undefined;
+        if (oldPhotoUri && oldPhotoUri !== nextPhotoUri) deletePersistedReviewPhoto(oldPhotoUri);
+      });
+    }
 
-  if (action.type === 'profile_updated') {
-    const nextPhotoUri = typeof action.payload.avatarPhotoUri === 'string' ? action.payload.avatarPhotoUri : undefined;
-    replaced.forEach((item) => {
-      const oldPhotoUri = typeof item.payload.avatarPhotoUri === 'string' ? item.payload.avatarPhotoUri : undefined;
-      if (oldPhotoUri && oldPhotoUri !== nextPhotoUri) deletePersistedReviewPhoto(oldPhotoUri);
-    });
-  }
+    if (action.type === 'profile_updated') {
+      const previous = replaced.reduce((payload, item) => mergeProfilePayload(payload, item.payload), {});
+      action.payload = mergeProfilePayload(previous, action.payload);
+      if (!activeSync) {
+        for (const kind of ['avatar', 'cover']) {
+          const nextPhotoUri = action.payload[`${kind}PhotoUri`];
+          replaced.forEach((item) => {
+            const oldPhotoUri = item.payload[`${kind}PhotoUri`];
+            if (typeof oldPhotoUri === 'string' && oldPhotoUri !== nextPhotoUri) deletePersistedReviewPhoto(oldPhotoUri);
+          });
+        }
+      }
+    }
 
-  await writeJson(queueKey, [...next, action].slice(-100));
-  emitQueueChange();
+    // Never silently discard an unsent profile (or another user's pending edits).
+    await writeJson(queueKey, [...next, action]);
+    emitQueueChange();
+    return action;
+  });
 }
 
 export function getOfflineActions() {
@@ -72,7 +90,7 @@ export async function getPendingOfflineActionCount(userId?: string) {
 
 export function onOfflineQueueChange(listener: () => void) {
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  return () => { listeners.delete(listener); };
 }
 
 export function syncOfflineActions() {
@@ -94,7 +112,7 @@ async function runSync(): Promise<OfflineSyncResult> {
   const {
     data: { user },
     error: userError,
-  } = await supabase.auth.getUser();
+  } = await supabase.auth.getUser().catch(() => ({ data: { user: null }, error: new Error('Offline') }));
 
   if (userError || !user) {
     return { synced: 0, failed: 0, pending: snapshot.length };
@@ -106,22 +124,30 @@ async function runSync(): Promise<OfflineSyncResult> {
   for (const action of snapshot) {
     if (action.userId && action.userId !== user.id) continue;
 
-    const error = await sendAction(action, user.id);
+    let error: string | null;
+    try {
+      error = await sendAction(action, user.id);
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : 'Não foi possível enviar a alteração.';
+    }
     if (error) failures.set(action.id, error);
     else syncedIds.add(action.id);
   }
 
-  const latest = await getOfflineActions();
-  const next = latest
-    .filter((action) => !syncedIds.has(action.id))
-    .map((action) => {
-      const lastError = failures.get(action.id);
-      return lastError
-        ? { ...action, userId: action.userId ?? user.id, attempts: action.attempts + 1, lastError }
-        : action;
-    });
+  const next = await withQueueLock(async () => {
+    const latest = await getOfflineActions();
+    const remaining = latest
+      .filter((action) => !syncedIds.has(action.id))
+      .map((action) => {
+        const lastError = failures.get(action.id);
+        return lastError
+          ? { ...action, userId: action.userId ?? user.id, attempts: action.attempts + 1, lastError }
+          : action;
+      });
 
-  await writeJson(queueKey, next);
+    await writeJson(queueKey, remaining);
+    return remaining;
+  });
   return { synced: syncedIds.size, failed: failures.size, pending: next.length };
 }
 
@@ -194,33 +220,50 @@ async function sendAction(action: OfflineAction, userId: string): Promise<string
     const fullName = typeof action.payload.fullName === 'string' ? action.payload.fullName.trim() : '';
     if (fullName.length < 2) return 'Nome do perfil inválido.';
 
-    const avatarPhotoUri = typeof action.payload.avatarPhotoUri === 'string' ? action.payload.avatarPhotoUri : undefined;
-    const avatarMimeType = typeof action.payload.avatarMimeType === 'string' ? action.payload.avatarMimeType : 'image/jpeg';
-    const avatarFileName = typeof action.payload.avatarFileName === 'string' ? action.payload.avatarFileName : undefined;
-    let avatarUrl = typeof action.payload.avatarUrl === 'string' ? action.payload.avatarUrl : null;
-
-    if (avatarPhotoUri) {
-      try {
-        const photo = await readReviewPhoto(avatarPhotoUri);
-        const extension = extensionFor(avatarMimeType, avatarFileName);
-        const storagePath = `${userId}/profile-avatar.${extension}`;
-        const { error: uploadError } = await supabase.storage.from('review-media').upload(storagePath, photo, {
-          contentType: avatarMimeType,
-          upsert: true,
-        });
-        if (uploadError) return uploadError.message;
-        avatarUrl = supabase.storage.from('review-media').getPublicUrl(storagePath).data.publicUrl;
-      } catch (error) {
-        return error instanceof Error ? error.message : 'Não foi possível preparar a foto do perfil.';
+    const updates: Record<string, unknown> = { full_name: fullName };
+    if (typeof action.payload.bio === 'string') updates.bio = action.payload.bio.trim();
+    for (const kind of ['avatar', 'cover']) {
+      const uri = action.payload[`${kind}PhotoUri`];
+      if (typeof uri === 'string') {
+        const mime = typeof action.payload[`${kind}MimeType`] === 'string' ? String(action.payload[`${kind}MimeType`]) : 'image/jpeg';
+        const fileName = typeof action.payload[`${kind}FileName`] === 'string' ? String(action.payload[`${kind}FileName`]) : undefined;
+        const path = `${userId}/profile-${kind}-${action.id}.${extensionFor(mime, fileName)}`;
+        const { error } = await supabase.storage.from('review-media').upload(path, await readReviewPhoto(uri), { contentType: mime, upsert: true });
+        if (error) return error.message;
+        updates[`${kind}_url`] = supabase.storage.from('review-media').getPublicUrl(path).data.publicUrl;
+      } else if (Object.hasOwn(action.payload, `${kind}Url`)) {
+        const url = action.payload[`${kind}Url`];
+        if (url !== null && (typeof url !== 'string' || !/^https?:\/\//.test(url))) return 'Endereço de foto inválido.';
+        updates[`${kind}_url`] = url;
       }
     }
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
-      .update({ full_name: fullName, avatar_url: avatarUrl })
-      .eq('id', userId);
-    if (!error) await supabase.auth.updateUser({ data: { full_name: fullName, avatar_url: avatarUrl } });
-    return error?.message ?? null;
+      .update(updates)
+      .eq('id', userId)
+      .select('id,full_name,avatar_url,cover_url,bio,role')
+      .single();
+    if (error) return error.message;
+    if (!data || data.id !== userId) return 'O servidor não confirmou a atualização do perfil.';
+
+    const key = scopedKey('nightguide:profile', userId);
+    await withProfileCacheLock(async () => {
+      const cached = await readJson<Profile | null>(key, null);
+      // A newer edit must not be overwritten by an older upload finishing late.
+      if (cached && cached.pendingActionId === action.id) {
+        await writeJson(key, {
+          ...cached,
+          fullName: data.full_name,
+          avatarUrl: data.avatar_url || undefined,
+          coverUrl: data.cover_url || undefined,
+          bio: data.bio || '',
+          pendingActionId: undefined,
+          syncError: undefined,
+        });
+      }
+    });
+    return null;
   }
 
   if (action.type === 'ticket_purchased') {

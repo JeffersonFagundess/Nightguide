@@ -11,6 +11,8 @@ on:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     timeout-minutes: 45
     env:
       EXPO_NO_TELEMETRY: "1"
@@ -45,6 +47,12 @@ jobs:
         run: pnpm install --frozen-lockfile
         working-directory: apps/mobile
 
+      - name: Check types and profile persistence
+        run: |
+          pnpm typecheck
+          pnpm test:profile
+        working-directory: apps/mobile
+
       - name: Generate Android project
         run: pnpm exec expo prebuild --platform android --clean --no-install
         working-directory: apps/mobile
@@ -64,3 +72,21 @@ jobs:
           path: apps/mobile/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish APK in Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./apps/mobile/app.json').expo.version")
+          TAG="v$VERSION"
+          APK="$RUNNER_TEMP/NightGuide-$VERSION-arm64.apk"
+          cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk "$APK"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # Do not replace an APK already published under an existing version.
+            if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fxq "NightGuide-$VERSION-arm64.apk"; then
+              gh release upload "$TAG" "$APK" --repo "$GITHUB_REPOSITORY"
+            fi
+          else
+            gh release create "$TAG" "$APK" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "NightGuide $VERSION — Android" --generate-notes
+          fi

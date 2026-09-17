@@ -34,7 +34,7 @@ A base Expo/React Native fica em `apps/mobile`. Ela convive com a versao web e i
 - Modal de detalhes de evento/local com fechamento por `Esc`.
 - Login e cadastro por email/senha com validacao por campo, senha visivel/oculta e recuperacao de senha.
 - Login com Google via Supabase Auth.
-- Conta de cliente em formato de painel, com foto/nome de perfil, favoritos, publicacoes e ingressos.
+- Conta nativa com nome, foto, capa como fundo do cartao e descricao; atalhos para favoritos, publicacoes e ingressos.
 - Conta de dono com edicao de perfil do estabelecimento e eventos locais.
 - Compra de ingresso teste por cartao, Pix visual e Checkout Pro.
 - Mensagem de pagamento confirmado dentro da tela.
@@ -68,7 +68,10 @@ Para gerar um APK pelo EAS, faça login uma vez e use:
 pnpm build:apk
 ```
 
-O repositório também gera um APK standalone automaticamente no workflow **Build Android APK**. Depois da validação, o APK é publicado em **Releases** para instalação; o mesmo arquivo aparece como artefato `NightGuide-Android-APK` na execução do GitHub Actions.
+O repositório também gera um APK standalone automaticamente no workflow **Build Android APK**.
+Quando o build termina com sucesso, ele publica o APK em **Releases**, usando a versão de `apps/mobile/app.json`.
+O mesmo arquivo aparece como artefato `NightGuide-Android-APK` na execução do GitHub Actions.
+Para uma nova versão, aumente também o `android.versionCode`; o workflow não substitui um APK já publicado.
 
 Para build de producao:
 

@@ -14,7 +14,7 @@ import { colors } from '@/src/theme';
 export default function AccountSettingsScreen() {
   const { user, logout } = useAuth();
   const { language } = usePreferences();
-  const t = copy[language];
+  const t = { ...copy[language], profileHint: language === 'pt' ? 'Nome, foto, capa e descrição' : 'Name, photo, cover and bio' };
 
   useEffect(() => {
     if (!user) router.replace('/auth/login');

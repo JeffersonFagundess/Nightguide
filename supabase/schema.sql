@@ -25,12 +25,16 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   full_name text,
   avatar_url text,
+  cover_url text,
   phone text,
   bio text,
   role public.user_role not null default 'customer',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Existing installations also need the additive profile-cover column.
+alter table public.profiles add column if not exists cover_url text;
 
 create table if not exists public.venues (
   id uuid primary key default gen_random_uuid(),

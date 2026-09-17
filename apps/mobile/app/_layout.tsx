@@ -64,6 +64,7 @@ function AppNavigation() {
                 <Stack.Screen name="account/post" options={{ title: language === 'pt' ? 'Publicação' : 'Post', presentation: 'modal' }} />
                 <Stack.Screen name="account/edit-profile" options={{ title: language === 'pt' ? 'Editar perfil' : 'Edit profile', presentation: 'card' }} />
                 <Stack.Screen name="account/settings" options={{ title: language === 'pt' ? 'Configurações' : 'Settings', presentation: 'card' }} />
+                <Stack.Screen name="account/activity" options={{ title: language === 'pt' ? 'Minha atividade' : 'My activity', presentation: 'card' }} />
                 <Stack.Screen name="scanner" options={{ title: language === 'pt' ? 'Validar ingresso' : 'Validate ticket', presentation: 'fullScreenModal' }} />
                 <Stack.Screen name="owner" options={{ title: language === 'pt' ? 'Painel do estabelecimento' : 'Venue dashboard' }} />
               </Stack>

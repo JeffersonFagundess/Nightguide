@@ -33,6 +33,7 @@ Campos principais:
 - `id`
 - `full_name`
 - `avatar_url`
+- `cover_url`
 - `phone`
 - `bio`
 - `role`
@@ -44,6 +45,11 @@ Uso:
 - cliente comum
 - dono de estabelecimento
 - admin/promoter no futuro
+
+A foto e a capa do perfil usam arquivos no bucket `review-media`, dentro da pasta do usuario.
+No app nativo, `bio` e a descricao do perfil. O cache local preserva as imagens e o texto
+enquanto houver uma edicao pendente; a API confirma exatamente uma linha atualizada antes
+de remover essa alteracao da fila offline.
 
 ### venues
 

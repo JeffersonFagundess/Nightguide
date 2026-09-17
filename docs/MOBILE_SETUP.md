@@ -68,7 +68,10 @@ Credenciais de teste continuam obrigatorias. A simulacao local e rotulada como d
 - camera e galeria para anexar fotos as publicacoes
 - criacao, edicao e exclusao de publicacao offline, com envio automatico ao reconectar
 - rascunho automatico, busca de estabelecimento e fotos em tela cheia
-- painel de conta com edicao de nome/foto, tema, idioma e recuperacao de senha
+- painel de conta com edicao de nome, foto, capa e descricao, tema, idioma e recuperacao de senha
+- capa como fundo do cartao do perfil, com transparencia para preservar a leitura
+- atalhos de favoritos e publicacoes abrem telas proprias com limite inicial de 5 itens
+- perfil salvo localmente offline; atualizacoes pendentes nunca sao substituidas pelo perfil antigo do servidor
 - perfil publico do estabelecimento com comentarios de outras pessoas
 - cache local das publicacoes visitadas para leitura offline
 - upload de imagem para Supabase Storage, limitado a 6 MB e JPEG/PNG/WebP
@@ -84,8 +87,18 @@ Credenciais de teste continuam obrigatorias. A simulacao local e rotulada como d
 
 ```bash
 pnpm typecheck
+pnpm test:profile
 pnpm export:android
 pnpm doctor
 ```
 
 Camera, galeria, fila offline, notificacoes, localizacao, OAuth e checkout devem ser validados tambem em aparelho Android real antes de release.
+
+Para um banco existente, aplique a migration `supabase/migrations/20260917160519_profile_cover.sql`.
+Ela adiciona `profiles.cover_url` sem criar outra tabela e reutiliza o bucket `review-media`.
+As fotos recebem URLs diferentes a cada alteracao, evitando a exibicao da imagem antiga em cache.
+
+Teste do perfil: escolha foto/capa e escreva uma descricao; salve, feche e reabra o app.
+Repita sem internet e altere apenas o texto uma segunda vez: as fotos devem continuar salvas.
+Reconecte e confira o envio. Em caso de falha, o app informa que os dados estao apenas no aparelho,
+mantem a fila e tenta novamente ao reconectar ou voltar ao aplicativo.

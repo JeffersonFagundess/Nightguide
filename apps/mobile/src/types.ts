@@ -40,6 +40,12 @@ export type Profile = {
   fullName: string;
   role: UserRole;
   avatarUrl?: string;
+  avatarLocalUri?: string;
+  coverUrl?: string;
+  coverLocalUri?: string;
+  bio?: string;
+  pendingActionId?: string;
+  syncError?: string;
 };
 
 export type Ticket = {
