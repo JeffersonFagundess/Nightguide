@@ -4,7 +4,8 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/src/components/button';
 import { PostImage } from '@/src/components/post-image';
-import { ProfileAvatar } from '@/src/components/profile-avatar';
+import { PublicAuthor } from '@/src/components/public-author';
+import { publicAuthorName } from '@/src/lib/public-profile-data';
 import { useAuth } from '@/src/providers/auth-provider';
 import { usePreferences } from '@/src/providers/preferences-provider';
 import { useUserData } from '@/src/providers/user-data-provider';
@@ -27,7 +28,7 @@ export function AccountPostsList({ reviews }: { reviews: Review[] }) {
   const { deleteReview } = useUserData();
   const { language } = usePreferences();
   const t = copy[language];
-  const name = profile?.fullName || user?.email || 'NightGuide';
+  const name = publicAuthorName(profile?.fullName);
 
   function confirmDelete(id: string) {
     Alert.alert(t.deleteTitle, t.deleteText, [
@@ -42,11 +43,12 @@ export function AccountPostsList({ reviews }: { reviews: Review[] }) {
   return <View style={styles.list}>{reviews.map((review) => (
     <View key={review.id} style={styles.post}>
       <View style={styles.postHeader}>
-        <ProfileAvatar name={name} uri={profile?.avatarLocalUri || profile?.avatarUrl} size={40} />
-        <View style={styles.rowCopy}><Text numberOfLines={1} style={styles.rowTitle}>{name}</Text><Pressable accessibilityRole="button" accessibilityLabel={review.venue} onPress={() => router.push({ pathname: '/venue/[id]', params: { id: review.venueId } })}><Text numberOfLines={1} style={styles.rowMeta}>📍 {review.venue}</Text></Pressable></View>
+        <PublicAuthor review={{ ...review, userId: user?.id, authorName: name,
+          authorAvatarUrl: profile?.avatarUrl, authorAvatarLocalUri: profile?.avatarLocalUri }} />
         <Pressable accessibilityRole="button" accessibilityLabel={t.edit} onPress={() => router.push({ pathname: '/account/post', params: { reviewId: review.id } } as never)} style={styles.postAction}><Pencil size={17} color={colors.text} /></Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={t.delete} onPress={() => confirmDelete(review.id)} style={styles.postAction}><Trash2 size={17} color={colors.rose} /></Pressable>
       </View>
+      <Pressable accessibilityRole="button" accessibilityLabel={review.venue} style={styles.venueLink} onPress={() => router.push({ pathname: '/venue/[id]', params: { id: review.venueId } })}><Text numberOfLines={2} style={styles.rowMeta}>📍 {review.venue}</Text></Pressable>
       <Text style={styles.postDescription}>{review.comment}</Text>
       {review.photoUri || review.photoUrl ? <PostImage source={{ uri: review.photoUri || review.photoUrl }} /> : null}
       <View style={styles.postFooter}><Text style={styles.rating}>{'★'.repeat(review.rating)}<Text style={styles.ratingMuted}>{'★'.repeat(5 - review.rating)}</Text></Text><Text style={styles.date}>{new Date(review.createdAt).toLocaleDateString(language === 'pt' ? 'pt-BR' : 'en-US')}</Text></View>
@@ -72,6 +74,7 @@ const styles = StyleSheet.create({
   postHeader: { flexDirection: 'row', alignItems: 'center', gap: 9, padding: 13 },
   postAction: { width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.elevated },
   postDescription: { color: colors.text, fontSize: 14, lineHeight: 21, paddingHorizontal: 13, paddingBottom: 13 },
+  venueLink: { paddingHorizontal: 13, paddingBottom: 10 },
   postFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 13 },
   rating: { color: colors.accent, letterSpacing: 1 },
   ratingMuted: { color: colors.border },

@@ -73,6 +73,9 @@ Credenciais de teste continuam obrigatorias. A simulacao local e rotulada como d
 - atalhos de favoritos e publicacoes abrem telas proprias com limite inicial de 5 itens
 - perfil salvo localmente offline; atualizacoes pendentes nunca sao substituidas pelo perfil antigo do servidor
 - perfil publico do estabelecimento com comentarios de outras pessoas
+- foto atual do autor nas publicacoes; tocar na foto ou nome abre o perfil publico sem exigir login
+- perfil publico mostra apenas nome, descricao, foto e capa como fundo do cartao; nunca email, telefone ou papel da conta
+- perfis consultados e suas fotos ficam salvos no aparelho para leitura offline
 - cache local das publicacoes visitadas para leitura offline
 - upload de imagem para Supabase Storage, limitado a 6 MB e JPEG/PNG/WebP
 - notificacao local para evento salvo com data futura
@@ -102,3 +105,26 @@ Teste do perfil: escolha foto/capa e escreva uma descricao; salve, feche e reabr
 Repita sem internet e altere apenas o texto uma segunda vez: as fotos devem continuar salvas.
 Reconecte e confira o envio. Em caso de falha, o app informa que os dados estao apenas no aparelho,
 mantem a fila e tenta novamente ao reconectar ou voltar ao aplicativo.
+
+## Perfil publico do autor
+
+A migration `supabase/migrations/20260917183914_public_author_profiles.sql` cria uma
+projecao publica com somente `id`, `full_name`, `avatar_url`, `cover_url` e `bio`.
+O cadastro e a edicao continuam usando a tabela existente `profiles`, cuja leitura
+privada por dono nao foi ampliada. Um trigger interno sincroniza a projecao e a
+foto/nome das publicacoes antigas. Clientes anonimos e autenticados podem consultar
+a projecao, mas nao altera-la diretamente. Nomes legados que usavam email recebem
+o nome publico `NightGuide` ate serem editados.
+
+Na publicacao aparecem apenas nome e foto. Os detalhes ficam na rota
+`/profile/[id]`, aberta exclusivamente ao tocar no autor ou acessar seu deep link.
+Autores ficticios de demonstracao nao abrem contas reais.
+
+Para demonstrar: consulte uma publicacao deslogado, toque no autor e confira o
+perfil sem email. Abra com internet primeiro para salvar texto, avatar e capa;
+depois reabra em modo aviao. Atualizacoes publicas de outro aparelho dependem do
+envio online do autor e de atualizar/abrir novamente o feed ou perfil.
+
+`pnpm test:profile` executa testes de persistencia/edicao do perfil e privacidade,
+cache offline e troca de fotos do perfil publico. A publicacao do APK `1.2.2`
+e automatica em Releases ao concluir com sucesso o workflow da branch `main`.

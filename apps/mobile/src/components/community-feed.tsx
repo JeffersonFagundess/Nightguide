@@ -12,6 +12,9 @@ import { colors } from '@/src/theme';
 import type { Review } from '@/src/types';
 import { getDemoReviews } from '@/src/data/demo-reviews';
 import { PostImage } from '@/src/components/post-image';
+import { PublicAuthor } from '@/src/components/public-author';
+import { attachPublicAuthors } from '@/src/lib/public-profiles';
+import { publicAuthorName } from '@/src/lib/public-profile-data';
 
 const cacheKey = 'nightguide:public-feed:v2';
 
@@ -34,18 +37,23 @@ export function CommunityFeed() {
       busy = true;
       setLoading(true);
       try {
-        const cached = await readJson<Review[]>(cacheKey, []);
+        const cached = await attachPublicAuthors(await readJson<Review[]>(cacheKey, []), false);
         if (active) setRemote(cached);
         if (!supabase) return;
         const { data, error: queryError } = await supabase.from('reviews')
-          .select('id,user_id,venue_id,rating,comment,image_url,author_name,created_at')
+          .select('id,user_id,venue_id,rating,comment,image_url,author_name,author_avatar_url,created_at')
           .order('created_at', { ascending: false }).limit(50).abortSignal(AbortSignal.timeout(10000));
         if (queryError) throw queryError;
-        const next = (data || []).map<Review>(row => ({
+        const posts = (data || []).map<Review>(row => ({
           id: String(row.id), userId: String(row.user_id), venueId: String(row.venue_id), venue: '',
           rating: Math.max(0, Math.min(5, Number(row.rating) || 0)), comment: String(row.comment || ''),
-          photoUrl: row.image_url || undefined, authorName: row.author_name || 'NightGuide', createdAt: String(row.created_at),
+          photoUrl: row.image_url || undefined, authorName: row.author_name || 'NightGuide',
+          authorAvatarUrl: row.author_avatar_url || undefined, createdAt: String(row.created_at),
         }));
+        // Show/save the fetched posts before downloading offline author photos.
+        if (active) { setRemote(posts); setError(false); }
+        await writeJson(cacheKey, posts);
+        const next = await attachPublicAuthors(posts);
         if (active) { setRemote(next); setError(false); }
         await writeJson(cacheKey, next);
       } catch { if (active) setError(true); }
@@ -56,11 +64,13 @@ export function CommunityFeed() {
     return () => { active = false; subscription.remove(); };
   }, []));
   const posts = useMemo(() => {
-    const own = user ? local.map(review => ({ ...review, userId: user.id, authorName: profile?.fullName || 'NightGuide' })) : [];
+    const own = user ? local.map(review => ({ ...review, userId: user.id,
+      authorName: publicAuthorName(profile?.fullName), authorAvatarUrl: profile?.avatarUrl,
+      authorAvatarLocalUri: profile?.avatarLocalUri })) : [];
     return [...own, ...remote.filter(review => !own.some(item => item.venueId === review.venueId && item.userId === review.userId))]
       .filter(review => venues.some(venue => venue.id === review.venueId) && !review.isDemo)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }, [local, remote, user, profile?.fullName, venues]);
+  }, [local, remote, user, profile?.fullName, profile?.avatarUrl, profile?.avatarLocalUri, venues]);
   const allPosts = useMemo(() => [...posts, ...demoPosts], [demoPosts, posts]);
   const visiblePosts = allPosts.slice(0, visibleCount);
   return <View style={styles.section}>
@@ -69,15 +79,16 @@ export function CommunityFeed() {
     {loading ? <Text style={styles.hint}>{pt ? 'Atualizando avaliações…' : 'Updating reviews…'}</Text> : null}
     {error ? <Text style={styles.hint}>{pt ? 'Sem atualização agora. Mostrando o conteúdo salvo neste aparelho.' : 'Unable to update. Showing content saved on this device.'}</Text> : null}
     {!posts.length && !loading ? <Text style={styles.hint}>{pt ? 'Ainda não há avaliações nestes locais. Abra um perfil para publicar a primeira.' : 'No reviews yet. Open a venue to share the first one.'}</Text> : null}
-    {visiblePosts.map(review => <Pressable key={`${review.userId}-${review.id}`} style={styles.post}
-      accessibilityRole="button" onPress={() => router.push({ pathname: '/venue/[id]', params: { id: review.venueId } })}>
-      <Text style={styles.author}>{review.authorName}</Text>
+    {visiblePosts.map(review => <View key={`${review.userId}-${review.id}`} style={styles.post}>
+      <PublicAuthor review={review} />
       {review.isDemo ? <Text style={styles.stars}>{pt ? 'DEMONSTRAÇÃO · FOTO DO LOCAL FORNECIDA PELO PROJETO' : 'DEMO · VENUE PHOTO PROVIDED BY THE PROJECT'}</Text> : null}
-      <Text style={styles.hint}>📍 {venues.find(venue => venue.id === review.venueId)?.name}</Text>
+      <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/venue/[id]', params: { id: review.venueId } })}>
+        <Text style={styles.hint}>📍 {venues.find(venue => venue.id === review.venueId)?.name}</Text>
+      </Pressable>
       <Text style={styles.comment}>{review.comment}</Text>
       {review.photoAsset || review.photoUri || review.photoUrl ? <PostImage source={review.photoAsset || { uri: review.photoUri || review.photoUrl }} rounded /> : null}
       <Text style={styles.stars}>{'★'.repeat(Math.max(0, Math.min(5, Math.round(review.rating))))} · {new Date(review.createdAt).toLocaleDateString(pt ? 'pt-BR' : 'en-US')}</Text>
-    </Pressable>)}
+    </View>)}
     {allPosts.length > 5 ? (
       <Pressable
         accessibilityRole="button"
@@ -97,7 +108,6 @@ const styles = StyleSheet.create({
   heading: { color: colors.text, fontWeight: '900', fontSize: 23 },
   hint: { color: colors.muted, lineHeight: 20, fontSize: 13 },
   post: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, borderRadius: 18, padding: 16, gap: 9 },
-  author: { color: colors.text, fontSize: 16, fontWeight: '800' },
   comment: { color: colors.text, lineHeight: 23, fontSize: 15 },
   stars: { color: colors.accent, fontSize: 12, lineHeight: 17, flexShrink: 1 },
   moreButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 15, borderWidth: 1, borderColor: colors.accent, backgroundColor: 'rgba(226,255,84,0.08)' },

@@ -56,6 +56,7 @@ function AppNavigation() {
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                 <Stack.Screen name="event/[id]" options={{ title: language === 'pt' ? 'Evento' : 'Event', presentation: 'card' }} />
                 <Stack.Screen name="venue/[id]" options={{ title: language === 'pt' ? 'Estabelecimento' : 'Venue', presentation: 'card' }} />
+                <Stack.Screen name="profile/[id]" options={{ title: language === 'pt' ? 'Perfil' : 'Profile', presentation: 'card' }} />
                 <Stack.Screen name="checkout/[eventId]" options={{ title: language === 'pt' ? 'Ingresso' : 'Ticket', presentation: 'card' }} />
                 <Stack.Screen name="auth/login" options={{ title: language === 'pt' ? 'Entrar' : 'Sign in', presentation: 'modal' }} />
                 <Stack.Screen name="auth/register" options={{ title: language === 'pt' ? 'Criar conta' : 'Create account', presentation: 'modal' }} />

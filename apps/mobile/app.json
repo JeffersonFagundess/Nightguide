@@ -2,7 +2,7 @@
   "expo": {
     "name": "NightGuide",
     "slug": "nightguide",
-    "version": "1.2.1",
+    "version": "1.2.2",
     "orientation": "portrait",
     "icon": "./assets/images/nightguide-icon.png",
     "scheme": "nightguide",
@@ -12,7 +12,7 @@
       "bundleIdentifier": "com.jeffersonfagundess.nightguide"
     },
     "android": {
-      "versionCode": 8,
+      "versionCode": 9,
       "adaptiveIcon": {
         "backgroundColor": "#09090B",
         "foregroundImage": "./assets/images/nightguide-adaptive.png",

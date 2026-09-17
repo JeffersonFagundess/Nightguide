@@ -290,6 +290,21 @@ RLS esta ativado em todas as tabelas publicas principais.
 - Dono le metricas do proprio local.
 - Metricas globais com `venue_id is null` podem ser lidas por dono autenticado.
 
+## Perfil publico do autor
+
+`author_profiles` e uma projecao sincronizada da tabela existente `profiles`.
+Contem somente `id`, `full_name`, `avatar_url`, `cover_url` e `bio`. RLS permite
+SELECT para visitantes (`anon`) e usuarios autenticados; eles nao possuem
+privilegios de INSERT/UPDATE/DELETE nessa projecao. A politica privada da tabela
+original nao foi ampliada.
+
+O trigger interno `private.sync_public_author_profile` sincroniza alteracoes de
+nome, foto, capa e descricao e atualiza os snapshots dos autores em reviews
+antigas. Funcoes de trigger usam search_path fixo e nao sao executaveis por
+clientes. Emails legados usados como nome padrao nao sao publicados.
+
+Migration: `supabase/migrations/20260917183914_public_author_profiles.sql`.
+
 ## Storage
 
 Buckets criados:

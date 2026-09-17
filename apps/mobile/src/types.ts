@@ -48,6 +48,17 @@ export type Profile = {
   syncError?: string;
 };
 
+// Separate from the private account: never include email, phone or role here.
+export type PublicProfile = {
+  id: string;
+  fullName: string;
+  bio?: string;
+  avatarUrl?: string;
+  coverUrl?: string;
+  avatarLocalUri?: string;
+  coverLocalUri?: string;
+};
+
 export type Ticket = {
   id: string;
   eventId: string;
@@ -80,6 +91,7 @@ export type Review = {
   photoFileName?: string;
   authorName?: string;
   authorAvatarUrl?: string;
+  authorAvatarLocalUri?: string;
   isDemo?: boolean;
 };
 

@@ -42,6 +42,10 @@ Favoritos, ingressos e publicações são persistidos localmente com AsyncStorag
 
 Os dados de descoberta e os comentários já carregados também ficam em cache para consulta offline.
 
+Perfil público: abra uma publicação e toque no nome/foto do autor, mesmo sem login.
+Confira nome, descrição, avatar e capa, sem e-mail/telefone. Após abrir com internet,
+reabra em modo avião para demonstrar o perfil e as fotos salvos no aparelho.
+
 ## 5. Sincronização
 
 1. Com uma alteração pendente, desative o modo avião.
@@ -77,7 +81,7 @@ Para baixar manualmente:
 
 1. Abra o repositório no GitHub.
 2. Entre em **Releases** e abra a versão mais recente.
-3. Em **Assets**, baixe `NightGuide-1.1.4-arm64.apk`. O mesmo binário também fica disponível como artefato `NightGuide-Android-APK` na execução correspondente do GitHub Actions.
-4. Extraia o ZIP e instale `app-release.apk`.
+3. Em **Assets**, baixe o APK da versão mais recente (por exemplo, `NightGuide-1.2.2-arm64.apk`) e instale diretamente. O mesmo binário também fica disponível como artefato `NightGuide-Android-APK` no GitHub Actions.
+4. Somente ao baixar o artefato do Actions: extraia o ZIP e instale `app-release.apk`.
 
 Também é possível gerar pelo EAS com `pnpm build:apk`, após executar `eas login` uma vez.

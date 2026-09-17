@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '@/src/theme';
@@ -9,6 +10,7 @@ type Props = {
 };
 
 export function ProfileAvatar({ name = 'NightGuide', uri, size = 64 }: Props) {
+  const [failedUri, setFailedUri] = useState<string>();
   const initials = name
     .trim()
     .split(/\s+/)
@@ -16,8 +18,8 @@ export function ProfileAvatar({ name = 'NightGuide', uri, size = 64 }: Props) {
     .map((part) => part[0]?.toUpperCase())
     .join('') || 'NG';
 
-  if (uri) {
-    return <Image source={{ uri }} resizeMode="cover" style={[styles.image, { width: size, height: size, borderRadius: size / 2 }]} />;
+  if (uri && uri !== failedUri) {
+    return <Image source={{ uri }} onError={() => setFailedUri(uri)} resizeMode="cover" style={[styles.image, { width: size, height: size, borderRadius: size / 2 }]} />;
   }
 
   return (

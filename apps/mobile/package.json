@@ -56,7 +56,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "test:profile": "node --test tests/profile-sync.test.cjs",
+    "test:profile": "node --test tests/profile-sync.test.cjs tests/public-profiles.test.cjs",
     "export:android": "expo export --platform android",
     "build:apk": "eas build --platform android --profile preview",
     "doctor": "expo-doctor"

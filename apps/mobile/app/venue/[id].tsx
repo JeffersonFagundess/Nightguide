@@ -1,15 +1,18 @@
-import { router, useLocalSearchParams } from 'expo-router';
-import { MapPin, MessageSquare, RefreshCw, Star, UserRound, X } from 'lucide-react-native';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { MapPin, MessageSquare, RefreshCw, Star, X } from 'lucide-react-native';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { FlatList, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/src/components/button';
 import { PostImage } from '@/src/components/post-image';
+import { PublicAuthor } from '@/src/components/public-author';
 import { Screen } from '@/src/components/screen';
 import { EmptyState, LoadingState } from '@/src/components/state';
 import { isUuid, readJson, writeJson } from '@/src/lib/storage';
 import { supabase } from '@/src/lib/supabase';
+import { attachPublicAuthors } from '@/src/lib/public-profiles';
+import { publicAuthorName } from '@/src/lib/public-profile-data';
 import { getDemoReviews } from '@/src/data/demo-reviews';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useNightData } from '@/src/providers/data-provider';
@@ -34,15 +37,19 @@ export default function VenueProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [visibleCount, setVisibleCount] = useState(5);
   const [selectedGalleryIndex, setSelectedGalleryIndex] = useState<number | null>(null);
+  const reviewRequest = useRef(0);
 
   const loadReviews = useCallback(async (manual = false) => {
     if (!venueId) return;
+    const request = ++reviewRequest.current;
+    setLoading(true);
     if (manual) setRefreshing(true);
     const cacheKey = `nightguide:venue-reviews:v3:${venueId}`;
     const demoReviews = getDemoReviews(venue?.name);
 
     try {
-      const cached = await readJson<Review[]>(cacheKey, []);
+      const cached = await attachPublicAuthors(await readJson<Review[]>(cacheKey, []), false);
+      if (request !== reviewRequest.current) return;
       if (cached.length) setRemoteReviews(cached);
       else if (demoReviews.length) setRemoteReviews(demoReviews);
 
@@ -52,7 +59,7 @@ export default function VenueProfileScreen() {
         .select('id,user_id,venue_id,rating,comment,image_url,author_name,author_avatar_url,created_at')
         .eq('venue_id', venueId)
         .order('created_at', { ascending: false })
-        .limit(100);
+        .limit(100).abortSignal(AbortSignal.timeout(10000));
       if (error) throw error;
 
       const next = (data || []).map<Review>((row) => ({
@@ -67,30 +74,37 @@ export default function VenueProfileScreen() {
         authorName: String(row.author_name || 'NightGuide'),
         authorAvatarUrl: row.author_avatar_url ? String(row.author_avatar_url) : undefined,
       }));
-      const visibleReviews = [...next, ...demoReviews];
+      if (request !== reviewRequest.current) return;
+      setRemoteReviews([...next, ...demoReviews]);
+      await writeJson(cacheKey, [...next, ...demoReviews]);
+      const visibleReviews = [...await attachPublicAuthors(next), ...demoReviews];
+      if (request !== reviewRequest.current) return;
       setRemoteReviews(visibleReviews);
       await writeJson(cacheKey, visibleReviews);
     } catch {
       // Keep cached publications visible while offline.
-      if (!remoteReviews.length && demoReviews.length) setRemoteReviews(demoReviews);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (request === reviewRequest.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [venue?.name, venueId]);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     setVisibleCount(5);
     void loadReviews();
-  }, [loadReviews]);
+    return () => { reviewRequest.current += 1; };
+  }, [loadReviews]));
 
   const publications = useMemo(() => {
     const ownLocal = localReviews
       .filter((review) => review.venueId === venueId)
-      .map((review) => ({ ...review, userId: user?.id, authorName: profile?.fullName || 'NightGuide' }));
+      .map((review) => ({ ...review, userId: user?.id, authorName: publicAuthorName(profile?.fullName),
+        authorAvatarUrl: profile?.avatarUrl, authorAvatarLocalUri: profile?.avatarLocalUri }));
     const otherRemote = remoteReviews.filter((review) => !ownLocal.some(local => local.id === review.id || (local.userId === review.userId && local.venueId === review.venueId)));
     return [...ownLocal, ...otherRemote].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }, [localReviews, profile?.fullName, remoteReviews, user, venueId]);
+  }, [localReviews, profile?.fullName, profile?.avatarUrl, profile?.avatarLocalUri, remoteReviews, user, venueId]);
   const visiblePublications = publications.slice(0, visibleCount);
 
   if (!venue) {
@@ -188,11 +202,7 @@ export default function VenueProfileScreen() {
           {visiblePublications.map((review) => (
             <View key={`${review.userId || 'local'}-${review.id}`} style={styles.post}>
               <View style={styles.postHeader}>
-                {review.authorAvatarUrl ? <Image source={{ uri: review.authorAvatarUrl }} style={styles.avatarImage} /> : <View style={styles.avatar}><UserRound size={19} color={colors.accent} /></View>}
-                <View style={styles.postHeaderCopy}>
-                  <Text style={styles.author}>{review.authorName || 'NightGuide'}</Text>
-                  <Text style={styles.venueLine}>📍 {venue.name}</Text>
-                </View>
+                <PublicAuthor review={review} subtitle={`📍 ${venue.name}`} />
                 <Text style={styles.date}>{new Date(review.createdAt).toLocaleDateString(language === 'pt' ? 'pt-BR' : 'en-US')}</Text>
               </View>
               <Text style={styles.postDescription}>{review.comment}</Text>
@@ -285,11 +295,6 @@ const styles = StyleSheet.create({
   feed: { gap: 14 },
   post: { overflow: 'hidden', borderWidth: 1, borderColor: colors.border, borderRadius: 18, backgroundColor: colors.surface },
   postHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 13 },
-  avatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(226,255,84,0.10)' },
-  avatarImage: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.elevated },
-  postHeaderCopy: { flex: 1 },
-  author: { color: colors.text, fontWeight: '900', fontSize: 14 },
-  venueLine: { color: colors.muted, fontSize: 12, marginTop: 2 },
   date: { color: colors.muted, fontSize: 10 },
   postDescription: { color: colors.text, fontSize: 14, lineHeight: 21, paddingHorizontal: 13, paddingBottom: 13 },
   postFooter: { padding: 13 },
