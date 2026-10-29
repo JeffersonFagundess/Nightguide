@@ -1,9 +1,10 @@
 import { MapPin, Search, SlidersHorizontal } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
-import { CommunityFeed } from '@/src/components/community-feed';
+import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, Alert, ActivityIndicator } from 'react-native';
+import * as Location from 'expo-location';
 
+import { CommunityFeed } from '@/src/components/community-feed';
 import { Brand } from '@/src/components/brand';
 import { EventCard } from '@/src/components/event-card';
 import { LanguageSwitch } from '@/src/components/language-switch';
@@ -16,7 +17,7 @@ import { colors } from '@/src/theme';
 import type { NightEvent, Venue } from '@/src/types';
 import { localizeVenueCategory } from '@/src/lib/i18n';
 
-const filters = ['all', 'free', 'live', 'beach', 'near'] as const;
+const filters = ['all', 'free', 'live', 'beach'] as const;
 type Filter = (typeof filters)[number];
 
 export default function DiscoveryScreen() {
@@ -25,27 +26,62 @@ export default function DiscoveryScreen() {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [visibleVenueCount, setVisibleVenueCount] = useState(5);
+
+  const [userLocation, setUserLocation] = useState<Location.LocationObjectCoords | null>(null);
+  const [loadingLocation, setLoadingLocation] = useState(false);
+  const [searchRadius, setSearchRadius] = useState(10); // Raio inicial de 10km
+
   const { language } = usePreferences();
   const { width: windowWidth } = useWindowDimensions();
   const t = copy[language];
   const featuredCardWidth = Math.max(280, windowWidth - 36);
 
+  const buscarLocalizacao = async () => {
+    setLoadingLocation(true);
+    try {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permissão Negada',
+          'Precisamos da sua localização para sugerir eventos perto de você. O app continuará funcionando com a lista padrão.'
+        );
+        setLoadingLocation(false);
+        return;
+      }
+
+      let currentLocation = await Location.getCurrentPositionAsync({});
+      setUserLocation(currentLocation.coords);
+      Alert.alert('Sucesso!', `Localização capturada. Carregando eventos num raio de ${searchRadius}km...`);
+
+    } catch (error) {
+      Alert.alert(
+        'Erro de Localização',
+        'Não foi possível obter sua localização. Verifique se o GPS do aparelho está ativado.'
+      );
+    } finally {
+      setLoadingLocation(false);
+    }
+  };
+
   const visible = useMemo(() => {
     const term = normalize(query);
     return events.filter((event) => {
       const searchable = normalize(`${event.title} ${event.venue} ${event.genre} ${event.highlight} ${event.mood}`);
-      return (!term || searchable.includes(term)) && matchesFilter(event, filter);
+      return (!term || searchable.includes(term)) && matchesFilter(event, filter, searchRadius, userLocation);
     });
-  }, [events, filter, query]);
+  }, [events, filter, query, searchRadius, userLocation]);
 
   const filteredVenues = useMemo(() => {
     const term = normalize(query);
-    return venues.filter(venue => !term || normalize(`${venue.name} ${venue.category} ${venue.address}`).includes(term));
-  }, [query, venues]);
+    return venues.filter(venue =>
+      (!term || normalize(`${venue.name} ${venue.category} ${venue.address}`).includes(term)) &&
+      (!userLocation || calcularDistancia(userLocation.latitude, userLocation.longitude, venue.latitude, venue.longitude) <= searchRadius)
+    );
+  }, [query, searchRadius, userLocation, venues]);
   const featuredVenues = useMemo(() => {
     const names = ['Restaurante Marisco', 'Villa Bistrô', 'P22'];
-    return names.map(name => venues.find(venue => venue.name === name)).filter((venue): venue is Venue => Boolean(venue));
-  }, [venues]);
+    return names.map(name => filteredVenues.find(venue => venue.name === name)).filter((venue): venue is Venue => Boolean(venue));
+  }, [filteredVenues]);
 
   useEffect(() => {
     setVisibleVenueCount(5);
@@ -83,9 +119,51 @@ export default function DiscoveryScreen() {
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
           {filters.map((item) => (
-            <Text key={item} onPress={() => setFilter(item)} style={[styles.filter, filter === item && styles.filterActive]}>{t.filters[item]}</Text>
+            <Text
+              key={item}
+              onPress={() => {
+                setFilter(item);
+                if (item === 'all') {
+                  setUserLocation(null);
+                }
+              }}
+              style={[styles.filter, filter === item && styles.filterActive]}
+            >
+              {t.filters[item]}
+            </Text>
           ))}
         </ScrollView>
+
+        {/* interface para disparar o recurso nativo de GPS com raio dinâmico */}
+        <View style={styles.locationContainer}>
+          <View style={styles.radiusHeader}>
+            <Text style={styles.radiusLabel}>Raio de busca (GPS):</Text>
+            <Text style={styles.radiusValue}>{searchRadius} km</Text>
+          </View>
+
+          <View style={styles.radiusControls}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Diminuir raio em 5 quilômetros" style={styles.radiusButton} onPress={() => setSearchRadius(current => Math.max(1, current - 5))}>
+              <Text style={styles.radiusButtonText}>−</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Aumentar raio em 5 quilômetros" style={styles.radiusButton} onPress={() => setSearchRadius(current => Math.min(100, current + 5))}>
+              <Text style={styles.radiusButtonText}>+</Text>
+            </Pressable>
+          </View>
+
+          {loadingLocation ? (
+            <ActivityIndicator size="large" color={colors.accent} />
+          ) : (
+            <Pressable style={styles.locationButton} onPress={buscarLocalizacao}>
+              <MapPin size={20} color={colors.ink} />
+              <Text style={styles.locationButtonText}>Eventos perto de mim (GPS)</Text>
+            </Pressable>
+          )}
+          {userLocation && (
+            <Text style={styles.coords}>
+              📍 GPS Ativo - Mostrando raio de {searchRadius}km
+            </Text>
+          )}
+        </View>
 
         {!query && filter === 'all' ? (
           <>
@@ -100,7 +178,7 @@ export default function DiscoveryScreen() {
               snapToInterval={featuredCardWidth + 18}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.featuredList}>
-              {events.slice(0, 2).map((event) => (
+              {visible.slice(0, 2).map((event) => (
                 <EventCard
                   key={event.id}
                   event={event}
@@ -120,7 +198,7 @@ export default function DiscoveryScreen() {
                   category={localizeVenueCategory(venue.category, language)}
                 />
               ))}
-              {events.slice(2, 4).map((event) => (
+              {visible.slice(2, 4).map((event) => (
                 <EventCard
                   key={event.id}
                   event={event}
@@ -202,7 +280,7 @@ const copy = {
     openVenue: 'ABRIR PERFIL E AVALIAÇÕES →',
     moreVenues: 'Ver mais estabelecimentos',
     onlyFiveVenues: 'Mostrar apenas 5 estabelecimentos',
-    filters: { all: 'Tudo', free: 'Grátis', live: 'Ao vivo', beach: 'Praia', near: 'Perto' },
+    filters: { all: 'Tudo', free: 'Grátis', live: 'Ao vivo', beach: 'Praia' },
   },
   en: {
     eyebrow: 'YOUR NIGHT STARTS HERE',
@@ -221,7 +299,7 @@ const copy = {
     openVenue: 'OPEN PROFILE AND REVIEWS →',
     moreVenues: 'See more venues',
     onlyFiveVenues: 'Show only 5 venues',
-    filters: { all: 'All', free: 'Free', live: 'Live', beach: 'Beach', near: 'Nearby' },
+    filters: { all: 'All', free: 'Free', live: 'Live', beach: 'Beach' },
   },
 } as const;
 
@@ -229,12 +307,41 @@ function normalize(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
 
-function matchesFilter(event: NightEvent, filter: Filter) {
+function calcularDistancia(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371; // Raio da Terra em km
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function matchesFilter(event: NightEvent, filter: Filter, radius: number, userLocation: Location.LocationObjectCoords | null) {
   const text = normalize(`${event.genre} ${event.mood} ${event.venue} ${event.highlight}`);
+
+  if (userLocation !== null) {
+    if (event.latitude != null && event.longitude != null && Number.isFinite(event.latitude) && Number.isFinite(event.longitude)) {
+      const distanciaReal = calcularDistancia(
+        userLocation.latitude,
+        userLocation.longitude,
+        event.latitude,
+        event.longitude
+      );
+
+      if (distanciaReal > radius) {
+        return false;
+      }
+    } else return false;
+  }
+
+  // Filtros normais
   if (filter === 'free') return normalize(event.price).includes('gratis');
   if (filter === 'live') return text.includes('ao vivo') || text.includes('samba') || text.includes('rock');
   if (filter === 'beach') return text.includes('praia') || text.includes('orla') || text.includes('mar');
-  if (filter === 'near') return /m$/.test(event.distance.trim()) || Number(event.distance.replace(/[^\d,]/g, '').replace(',', '.')) <= 2;
+
   return true;
 }
 
@@ -280,6 +387,12 @@ const styles = StyleSheet.create({
   filters: { paddingHorizontal: 18, paddingVertical: 16, gap: 9 },
   filter: { overflow: 'hidden', color: colors.muted, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 15, paddingVertical: 10, borderRadius: 999, fontSize: 13, fontWeight: '800' },
   filterActive: { color: colors.ink, backgroundColor: colors.accent, borderColor: colors.accent },
+
+  locationContainer: { paddingHorizontal: 18, marginBottom: 15, alignItems: 'flex-start' },
+  locationButton: { flexDirection: 'row', backgroundColor: colors.accent, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center', gap: 8 },
+  locationButtonText: { color: colors.ink, fontWeight: '800', fontSize: 14 },
+  coords: { marginTop: 10, color: colors.accent, fontWeight: '800', fontSize: 12 },
+
   sectionHeader: { marginTop: 18, marginBottom: 14, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sectionTitle: { color: colors.text, fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
   source: { color: colors.accent, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
@@ -300,4 +413,11 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.86, transform: [{ scale: 0.992 }] },
   moreButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 15, borderWidth: 1, borderColor: colors.accent, backgroundColor: 'rgba(226,255,84,0.08)', paddingHorizontal: 14 },
   moreButtonText: { color: colors.accent, fontSize: 13, fontWeight: '900', textAlign: 'center' },
+
+  radiusHeader: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginBottom: 5 },
+  radiusLabel: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  radiusValue: { color: colors.accent, fontSize: 14, fontWeight: '900' },
+  radiusControls: { flexDirection: 'row', gap: 12, marginBottom: 10 },
+  radiusButton: { width: 44, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  radiusButtonText: { color: colors.accent, fontSize: 24, fontWeight: '800' },
 });

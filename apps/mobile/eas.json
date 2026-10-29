@@ -4,8 +4,13 @@
     "appVersionSource": "local"
   },
   "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
     "preview": {
       "distribution": "internal",
+      "node": "24.21.0",
       "android": {
         "buildType": "apk"
       }
@@ -13,6 +18,8 @@
     "production": {
       "autoIncrement": true
     }
+  },
+  "submit": {
+    "production": {}
   }
 }
-
