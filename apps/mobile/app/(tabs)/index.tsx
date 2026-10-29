@@ -1,8 +1,9 @@
 import { MapPin, Search, SlidersHorizontal } from 'lucide-react-native';
 import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, Alert, ActivityIndicator } from 'react-native';
 import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { CommunityFeed } from '@/src/components/community-feed';
 import { Brand } from '@/src/components/brand';
@@ -18,6 +19,7 @@ import type { NightEvent, Venue } from '@/src/types';
 import { localizeVenueCategory } from '@/src/lib/i18n';
 
 const filters = ['all', 'free', 'live', 'beach'] as const;
+const savedLocationKey = 'nightguide:discovery-location:v1';
 type Filter = (typeof filters)[number];
 
 export default function DiscoveryScreen() {
@@ -29,6 +31,8 @@ export default function DiscoveryScreen() {
 
   const [userLocation, setUserLocation] = useState<Location.LocationObjectCoords | null>(null);
   const [loadingLocation, setLoadingLocation] = useState(false);
+  const locationRequestId = useRef(0);
+  const [locationSavedAt, setLocationSavedAt] = useState<string | null>(null);
   const [searchRadius, setSearchRadius] = useState(10); // Raio inicial de 10km
 
   const { language } = usePreferences();
@@ -36,31 +40,60 @@ export default function DiscoveryScreen() {
   const t = copy[language];
   const featuredCardWidth = Math.max(280, windowWidth - 36);
 
+  useEffect(() => {
+    let active = true;
+    void AsyncStorage.getItem(savedLocationKey).then(raw => {
+      if (!active || !raw) return;
+      const saved = JSON.parse(raw) as { latitude: number; longitude: number; savedAt: string };
+      if (Number.isFinite(saved.latitude) && Number.isFinite(saved.longitude)) {
+        setUserLocation({ latitude: saved.latitude, longitude: saved.longitude } as Location.LocationObjectCoords);
+        setLocationSavedAt(saved.savedAt);
+      }
+    }).catch(() => {
+      // A busca continua disponível mesmo se a leitura local falhar.
+    });
+    return () => { active = false; locationRequestId.current += 1; };
+  }, []);
+
   const buscarLocalizacao = async () => {
+    const requestId = ++locationRequestId.current;
     setLoadingLocation(true);
     try {
-      let { status } = await Location.requestForegroundPermissionsAsync();
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (requestId !== locationRequestId.current) return;
       if (status !== 'granted') {
         Alert.alert(
           'Permissão Negada',
           'Precisamos da sua localização para sugerir eventos perto de você. O app continuará funcionando com a lista padrão.'
         );
-        setLoadingLocation(false);
         return;
       }
 
-      let currentLocation = await Location.getCurrentPositionAsync({});
+      const currentLocation = await Location.getCurrentPositionAsync({});
+      if (requestId !== locationRequestId.current) return;
+      const { latitude, longitude } = currentLocation.coords;
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) throw new Error('Coordenadas inválidas');
+      const savedAt = new Date().toISOString();
+      await AsyncStorage.setItem(savedLocationKey, JSON.stringify({ latitude, longitude, savedAt }));
+      if (requestId !== locationRequestId.current) return;
       setUserLocation(currentLocation.coords);
-      Alert.alert('Sucesso!', `Localização capturada. Carregando eventos num raio de ${searchRadius}km...`);
+      setLocationSavedAt(savedAt);
+      Alert.alert('Localização salva', 'As coordenadas foram salvas neste aparelho e associadas à busca de eventos próximos.');
 
     } catch (error) {
+      if (requestId !== locationRequestId.current) return;
       Alert.alert(
         'Erro de Localização',
-        'Não foi possível obter sua localização. Verifique se o GPS do aparelho está ativado.'
+        'Não foi possível obter ou salvar sua localização. Verifique o GPS e tente novamente. A localização anterior foi preservada.'
       );
     } finally {
-      setLoadingLocation(false);
+      if (requestId === locationRequestId.current) setLoadingLocation(false);
     }
+  };
+
+  const cancelarLocalizacao = () => {
+    locationRequestId.current += 1;
+    setLoadingLocation(false);
   };
 
   const visible = useMemo(() => {
@@ -123,9 +156,6 @@ export default function DiscoveryScreen() {
               key={item}
               onPress={() => {
                 setFilter(item);
-                if (item === 'all') {
-                  setUserLocation(null);
-                }
               }}
               style={[styles.filter, filter === item && styles.filterActive]}
             >
@@ -151,17 +181,23 @@ export default function DiscoveryScreen() {
           </View>
 
           {loadingLocation ? (
-            <ActivityIndicator size="large" color={colors.accent} />
+            <View style={styles.locationProgress}>
+              <ActivityIndicator size="small" color={colors.accent} />
+              <Pressable accessibilityRole="button" onPress={cancelarLocalizacao} style={styles.radiusButton}>
+                <Text style={styles.coords}>Cancelar</Text>
+              </Pressable>
+            </View>
           ) : (
             <Pressable style={styles.locationButton} onPress={buscarLocalizacao}>
               <MapPin size={20} color={colors.ink} />
-              <Text style={styles.locationButtonText}>Eventos perto de mim (GPS)</Text>
+              <Text style={styles.locationButtonText}>{userLocation ? 'Atualizar localização (GPS)' : 'Eventos perto de mim (GPS)'}</Text>
             </Pressable>
           )}
           {userLocation && (
-            <Text style={styles.coords}>
-              📍 GPS Ativo - Mostrando raio de {searchRadius}km
-            </Text>
+            <View>
+              <Text style={styles.coords}>📍 Localização salva · {userLocation.latitude.toFixed(5)}, {userLocation.longitude.toFixed(5)}</Text>
+              <Text style={styles.coords}>Eventos em até {searchRadius} km · salvo em {locationSavedAt ? new Date(locationSavedAt).toLocaleString('pt-BR') : 'este aparelho'}</Text>
+            </View>
           )}
         </View>
 
@@ -418,6 +454,7 @@ const styles = StyleSheet.create({
   radiusLabel: { color: colors.text, fontSize: 14, fontWeight: '600' },
   radiusValue: { color: colors.accent, fontSize: 14, fontWeight: '900' },
   radiusControls: { flexDirection: 'row', gap: 12, marginBottom: 10 },
+  locationProgress: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   radiusButton: { width: 44, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   radiusButtonText: { color: colors.accent, fontSize: 24, fontWeight: '800' },
 });
