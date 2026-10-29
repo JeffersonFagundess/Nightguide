@@ -47,10 +47,11 @@ jobs:
         run: pnpm install --frozen-lockfile
         working-directory: apps/mobile
 
-      - name: Check types and profile persistence
+      - name: Check types and mobile flows
         run: |
           pnpm typecheck
           pnpm test:profile
+          node --experimental-strip-types --test tests/distance.test.mjs tests/event-period.test.mjs
         working-directory: apps/mobile
 
       - name: Generate Android project
