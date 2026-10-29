@@ -1,4 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { Camera, ImageIcon, Pencil, Plus, Save, Trash2 } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -12,11 +13,12 @@ import { useAuth } from '@/src/providers/auth-provider';
 import { useNightData } from '@/src/providers/data-provider';
 import { usePreferences } from '@/src/providers/preferences-provider';
 import { colors } from '@/src/theme';
+import { hasValidCoordinates } from '@/src/lib/distance';
 
-type OwnerVenue = { id: string; name: string; address: string; description: string; coverUrl: string };
+type OwnerVenue = { id: string; name: string; address: string; description: string; coverUrl: string; latitude: string; longitude: string };
 type OwnerEvent = { id: string; title: string; genre: string; description: string; startsAt: string; price: string; coverUrl: string };
 
-const emptyVenue: OwnerVenue = { id: '', name: '', address: '', description: '', coverUrl: '' };
+const emptyVenue: OwnerVenue = { id: '', name: '', address: '', description: '', coverUrl: '', latitude: '', longitude: '' };
 const emptyEvent = (): OwnerEvent => ({ id: '', title: '', genre: '', description: '', startsAt: tomorrowAtNine(), price: '20', coverUrl: '' });
 
 export default function OwnerScreen() {
@@ -39,7 +41,7 @@ export default function OwnerScreen() {
   }, [profile?.role, user]);
 
   async function loadOwnerData(userId: string) {
-    const venueResult = await supabase!.from('venues').select('id,name,address,description,cover_url').eq('owner_id', userId).limit(1).maybeSingle();
+    const venueResult = await supabase!.from('venues').select('id,name,address,description,cover_url,latitude,longitude').eq('owner_id', userId).limit(1).maybeSingle();
     if (venueResult.error) throw venueResult.error;
     if (!venueResult.data) return;
     const nextVenue = {
@@ -48,6 +50,8 @@ export default function OwnerScreen() {
       address: venueResult.data.address || '',
       description: venueResult.data.description || '',
       coverUrl: venueResult.data.cover_url || '',
+      latitude: venueResult.data.latitude == null ? '' : String(venueResult.data.latitude),
+      longitude: venueResult.data.longitude == null ? '' : String(venueResult.data.longitude),
     };
     setVenue(nextVenue);
     const eventsResult = await supabase!.from('events').select('id,title,genre,description,starts_at,price,cover_url').eq('venue_id', nextVenue.id).order('starts_at');
@@ -65,13 +69,16 @@ export default function OwnerScreen() {
 
   async function saveVenue() {
     if (!user || !supabase || !venue.name.trim()) return;
+    const coordinates = parseVenueCoordinates(venue);
+    if (coordinates === false) return Alert.alert(t.invalidCoordinates, t.coordinateFormat);
     setSaving(true);
     try {
+      const payload = { name: venue.name.trim(), address: venue.address.trim(), description: venue.description.trim(), cover_url: venue.coverUrl || null, latitude: coordinates?.latitude ?? null, longitude: coordinates?.longitude ?? null };
       if (venue.id) {
-        const { error } = await supabase.from('venues').update({ name: venue.name.trim(), address: venue.address.trim(), description: venue.description.trim(), cover_url: venue.coverUrl || null }).eq('id', venue.id);
+        const { error } = await supabase.from('venues').update(payload).eq('id', venue.id);
         if (error) throw error;
       } else {
-        const { data, error } = await supabase.from('venues').insert({ owner_id: user.id, name: venue.name.trim(), address: venue.address.trim(), description: venue.description.trim(), cover_url: venue.coverUrl || null, category: 'Bar e evento', is_published: false }).select('id').single();
+        const { data, error } = await supabase.from('venues').insert({ owner_id: user.id, ...payload, category: 'Bar e evento', is_published: false }).select('id').single();
         if (error) throw error;
         setVenue((current) => ({ ...current, id: data.id }));
       }
@@ -90,6 +97,12 @@ export default function OwnerScreen() {
     if (!startsAt) return Alert.alert(t.invalidDate, t.dateFormat);
     setSaving(true);
     try {
+      const venueResult = await supabase.from('venues').select('latitude,longitude').eq('id', venue.id).single();
+      if (venueResult.error) throw venueResult.error;
+      if (!hasValidCoordinates({ latitude: Number(venueResult.data.latitude), longitude: Number(venueResult.data.longitude) }) || venueResult.data.latitude == null || venueResult.data.longitude == null) {
+        Alert.alert(t.missingCoordinates, t.missingCoordinatesText);
+        return;
+      }
       const payload = { venue_id: venue.id, creator_id: user.id, title: draft.title.trim(), description: draft.description.trim(), genre: draft.genre.trim(), starts_at: startsAt, price: Number(draft.price.replace(',', '.')) || 0, cover_url: draft.coverUrl || venue.coverUrl || null, status: 'published' as const };
       if (draft.id) {
         const { error } = await supabase.from('events').update(payload).eq('id', draft.id);
@@ -105,6 +118,18 @@ export default function OwnerScreen() {
       Alert.alert(t.eventSaveError, error instanceof Error ? error.message : t.tryAgain);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function useVenueLocation() {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return Alert.alert(t.permission, t.locationPermission);
+      const { coords } = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      if (!hasValidCoordinates(coords)) throw new Error('Invalid coordinates');
+      setVenue(current => ({ ...current, latitude: coords.latitude.toFixed(6), longitude: coords.longitude.toFixed(6) }));
+    } catch {
+      Alert.alert(t.locationError, t.tryAgain);
     }
   }
 
@@ -160,6 +185,10 @@ export default function OwnerScreen() {
         </View>
         <FormField label={t.name} value={venue.name} onChangeText={(name) => setVenue((current) => ({ ...current, name }))} />
         <FormField label={t.address} value={venue.address} onChangeText={(address) => setVenue((current) => ({ ...current, address }))} />
+        <FormField label={t.latitude} value={venue.latitude} onChangeText={(latitude) => setVenue(current => ({ ...current, latitude }))} keyboardType="decimal-pad" />
+        <FormField label={t.longitude} value={venue.longitude} onChangeText={(longitude) => setVenue(current => ({ ...current, longitude }))} keyboardType="decimal-pad" />
+        <Button label={t.useGps} variant="secondary" onPress={() => void useVenueLocation()} />
+        <Text style={styles.hint}>{t.coordinatesHint}</Text>
         <FormField label={t.description} value={venue.description} onChangeText={(description) => setVenue((current) => ({ ...current, description }))} multiline />
         <Button label={t.saveVenue} icon={Save} onPress={() => void saveVenue()} loading={saving} />
       </Panel>
@@ -177,7 +206,7 @@ export default function OwnerScreen() {
         </View>
         <Button label={draft.id ? t.saveEdit : t.publishEvent} icon={draft.id ? Save : Plus} onPress={() => void saveEvent()} loading={saving} disabled={!venue.id} />
         {draft.id ? <Button label={t.cancelEdit} variant="ghost" onPress={() => setDraft(emptyEvent())} /> : null}
-        {!venue.id ? <Text style={styles.hint}>{t.saveFirst}</Text> : null}
+        {!venue.id ? <Text style={styles.hint}>{t.saveFirst}</Text> : !parseVenueCoordinates(venue) ? <Text style={styles.hint}>{t.missingCoordinatesText}</Text> : null}
       </Panel>
 
       <Panel title={t.publishedEvents}>
@@ -194,9 +223,18 @@ export default function OwnerScreen() {
 }
 
 const ownerCopy = {
-  pt: { venueSaved: 'Estabelecimento salvo', venueSavedText: 'As informações foram atualizadas no Supabase.', saveError: 'Não foi possível salvar', tryAgain: 'Tente novamente.', invalidDate: 'Data inválida', dateFormat: 'Use o formato AAAA-MM-DD HH:mm.', eventSaveError: 'Não foi possível salvar o evento', deleteError: 'Não foi possível excluir', permission: 'Permissão necessária', cameraPermission: 'Permita o uso da câmera.', galleryPermission: 'Permita o acesso à galeria.', uploadError: 'Falha no upload', uploadErrorText: 'Não foi possível enviar a imagem.', loading: 'Carregando o estabelecimento…', ownerRequired: 'Conta de dono necessária', ownerRequiredText: 'O perfil precisa ter role owner no Supabase para editar um estabelecimento.', eyebrow: 'GESTÃO NATIVA', title: 'Seu estabelecimento', venueProfile: 'Perfil do local', gallery: 'Galeria', camera: 'Câmera', name: 'Nome', address: 'Endereço', description: 'Descrição', saveVenue: 'Salvar estabelecimento', editEvent: 'Editar evento', createEvent: 'Criar evento', eventTitle: 'Título', genre: 'Gênero', dateTime: 'Data e hora (AAAA-MM-DD HH:mm)', price: 'Preço em reais', galleryCover: 'Capa da galeria', takePhoto: 'Fotografar', saveEdit: 'Salvar edição', publishEvent: 'Publicar evento', cancelEdit: 'Cancelar edição', saveFirst: 'Salve o estabelecimento antes de publicar o primeiro evento.', publishedEvents: 'Eventos publicados', deleteEvent: 'Excluir evento?', cancel: 'Cancelar', delete: 'Excluir', noEvents: 'Nenhum evento publicado por este estabelecimento.' },
-  en: { venueSaved: 'Venue saved', venueSavedText: 'The information was updated in Supabase.', saveError: 'Unable to save', tryAgain: 'Try again.', invalidDate: 'Invalid date', dateFormat: 'Use YYYY-MM-DD HH:mm.', eventSaveError: 'Unable to save event', deleteError: 'Unable to delete', permission: 'Permission required', cameraPermission: 'Allow camera access.', galleryPermission: 'Allow gallery access.', uploadError: 'Upload failed', uploadErrorText: 'Unable to upload the image.', loading: 'Loading venue…', ownerRequired: 'Owner account required', ownerRequiredText: 'The profile must have the owner role in Supabase to edit a venue.', eyebrow: 'NATIVE MANAGEMENT', title: 'Your venue', venueProfile: 'Venue profile', gallery: 'Gallery', camera: 'Camera', name: 'Name', address: 'Address', description: 'Description', saveVenue: 'Save venue', editEvent: 'Edit event', createEvent: 'Create event', eventTitle: 'Title', genre: 'Genre', dateTime: 'Date and time (YYYY-MM-DD HH:mm)', price: 'Price in BRL', galleryCover: 'Gallery cover', takePhoto: 'Take photo', saveEdit: 'Save changes', publishEvent: 'Publish event', cancelEdit: 'Cancel editing', saveFirst: 'Save the venue before publishing the first event.', publishedEvents: 'Published events', deleteEvent: 'Delete event?', cancel: 'Cancel', delete: 'Delete', noEvents: 'No events published by this venue.' },
+  pt: { venueSaved: 'Estabelecimento salvo', venueSavedText: 'As informações foram atualizadas no Supabase.', saveError: 'Não foi possível salvar', tryAgain: 'Tente novamente.', invalidDate: 'Data inválida', dateFormat: 'Use o formato AAAA-MM-DD HH:mm.', eventSaveError: 'Não foi possível salvar o evento', deleteError: 'Não foi possível excluir', permission: 'Permissão necessária', cameraPermission: 'Permita o uso da câmera.', galleryPermission: 'Permita o acesso à galeria.', uploadError: 'Falha no upload', uploadErrorText: 'Não foi possível enviar a imagem.', loading: 'Carregando o estabelecimento…', ownerRequired: 'Conta de dono necessária', ownerRequiredText: 'O perfil precisa ter role owner no Supabase para editar um estabelecimento.', eyebrow: 'GESTÃO NATIVA', title: 'Seu estabelecimento', venueProfile: 'Perfil do local', gallery: 'Galeria', camera: 'Câmera', name: 'Nome', address: 'Endereço', description: 'Descrição', saveVenue: 'Salvar estabelecimento', editEvent: 'Editar evento', createEvent: 'Criar evento', eventTitle: 'Título', genre: 'Gênero', dateTime: 'Data e hora (AAAA-MM-DD HH:mm)', price: 'Preço em reais', galleryCover: 'Capa da galeria', takePhoto: 'Fotografar', saveEdit: 'Salvar edição', publishEvent: 'Publicar evento', cancelEdit: 'Cancelar edição', saveFirst: 'Salve o estabelecimento antes de publicar o primeiro evento.', publishedEvents: 'Eventos publicados', deleteEvent: 'Excluir evento?', cancel: 'Cancelar', delete: 'Excluir', noEvents: 'Nenhum evento publicado por este estabelecimento.', latitude: 'Latitude', longitude: 'Longitude', useGps: 'Usar minha localização para este local', coordinatesHint: 'Informe o ponto exato do estabelecimento. Os eventos herdam essas coordenadas para o filtro por distância.', invalidCoordinates: 'Coordenadas inválidas', coordinateFormat: 'Preencha latitude e longitude válidas, ou deixe ambas vazias.', missingCoordinates: 'Localização necessária', missingCoordinatesText: 'Salve a latitude e longitude do estabelecimento antes de publicar eventos.', locationPermission: 'Permita acesso à localização para preencher as coordenadas.', locationError: 'Não foi possível obter a localização' },
+  en: { venueSaved: 'Venue saved', venueSavedText: 'The information was updated in Supabase.', saveError: 'Unable to save', tryAgain: 'Try again.', invalidDate: 'Invalid date', dateFormat: 'Use YYYY-MM-DD HH:mm.', eventSaveError: 'Unable to save event', deleteError: 'Unable to delete', permission: 'Permission required', cameraPermission: 'Allow camera access.', galleryPermission: 'Allow access to your photos.', uploadError: 'Upload failed', uploadErrorText: 'Unable to upload the image.', loading: 'Loading venue…', ownerRequired: 'Owner account required', ownerRequiredText: 'The profile must have the owner role in Supabase to edit a venue.', eyebrow: 'NATIVE MANAGEMENT', title: 'Your venue', venueProfile: 'Venue profile', gallery: 'Gallery', camera: 'Camera', name: 'Name', address: 'Address', description: 'Description', saveVenue: 'Save venue', editEvent: 'Edit event', createEvent: 'Create event', eventTitle: 'Title', genre: 'Genre', dateTime: 'Date and time (YYYY-MM-DD HH:mm)', price: 'Price in BRL', galleryCover: 'Gallery cover', takePhoto: 'Take photo', saveEdit: 'Save changes', publishEvent: 'Publish event', cancelEdit: 'Cancel editing', saveFirst: 'Save the venue before publishing the first event.', publishedEvents: 'Published events', deleteEvent: 'Delete event?', cancel: 'Cancel', delete: 'Delete', noEvents: 'No events published by this venue.', latitude: 'Latitude', longitude: 'Longitude', useGps: 'Use my location for this venue', coordinatesHint: 'Set the venue’s exact location. Its events use these coordinates for distance filtering.', invalidCoordinates: 'Invalid coordinates', coordinateFormat: 'Enter valid latitude and longitude, or leave both empty.', missingCoordinates: 'Location required', missingCoordinatesText: 'Save the venue latitude and longitude before publishing events.', locationPermission: 'Allow location access to fill the coordinates.', locationError: 'Could not get location' },
 } as const;
+
+function parseVenueCoordinates(venue: OwnerVenue) {
+  const latitude = venue.latitude.trim();
+  const longitude = venue.longitude.trim();
+  if (!latitude && !longitude) return null;
+  if (!latitude || !longitude) return false;
+  const coordinates = { latitude: Number(latitude.replace(',', '.')), longitude: Number(longitude.replace(',', '.')) };
+  return hasValidCoordinates(coordinates) ? coordinates : false;
+}
 
 function Panel({ title, children }: React.PropsWithChildren<{ title: string }>) {
   return <View style={styles.panel}><Text style={styles.panelTitle}>{title}</Text><View style={styles.panelBody}>{children}</View></View>;

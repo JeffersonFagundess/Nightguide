@@ -1,6 +1,8 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { CalendarDays, Heart, MapPin, Navigation, Share2, Sparkles, Ticket } from 'lucide-react-native';
 import { Image, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Button } from '@/src/components/button';
 import { Screen } from '@/src/components/screen';
@@ -12,6 +14,7 @@ import { useUserData } from '@/src/providers/user-data-provider';
 import { usePreferences } from '@/src/providers/preferences-provider';
 import { colors } from '@/src/theme';
 import { localizeEventText } from '@/src/lib/i18n';
+import { distanceFromUserKm, formatDistance, hasValidCoordinates, savedLocationKey, type Coordinates } from '@/src/lib/distance';
 
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -22,12 +25,24 @@ export default function EventDetailScreen() {
   const t = eventCopy[language];
   const event = getEvent(id);
   const venue = event ? venues.find((item) => item.id === event.venueId || item.name === event.venue) : undefined;
+  const [userLocation, setUserLocation] = useState<Coordinates | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void AsyncStorage.getItem(savedLocationKey).then(raw => {
+      if (!active || !raw) return;
+      const saved = JSON.parse(raw) as Coordinates;
+      if (hasValidCoordinates(saved)) setUserLocation(saved);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   if (!event) {
     return <Screen contentStyle={styles.missing}><EmptyState title={t.notFound} text={t.notFoundText} action={{ label: t.back, onPress: () => router.back() }} /></Screen>;
   }
 
   const saved = favoriteIds.includes(event.id);
+  const eventDistance = distanceFromUserKm(userLocation, event);
 
   async function shareEvent() {
     await Share.share({
@@ -74,7 +89,7 @@ export default function EventDetailScreen() {
             disabled={!venue}
             onPress={() => venue && router.push({ pathname: '/venue/[id]', params: { id: venue.id } })}
             style={styles.venueRow}>
-            <MapPin size={16} color={colors.accent} /><Text style={styles.venue}>{event.venue}{venue ? ` • ${t.viewProfile}` : ''}</Text>
+            <MapPin size={16} color={colors.accent} /><Text style={styles.venue}>{event.venue}{eventDistance != null ? ` · ${formatDistance(eventDistance, language)}` : ''}{venue ? ` • ${t.viewProfile}` : ''}</Text>
           </Pressable>
         </View>
       </View>

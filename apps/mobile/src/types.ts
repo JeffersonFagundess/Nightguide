@@ -13,7 +13,6 @@ export type NightEvent = {
   image: string;
   highlight: string;
   mood: string;
-  distance: string;
   latitude?: number;
   longitude?: number;
 };

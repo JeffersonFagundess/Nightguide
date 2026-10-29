@@ -2,6 +2,8 @@
 
 O app nativo do NightGuide fica em `apps/mobile` e usa Expo 57, React Native, Expo Router e TypeScript. A versao Next.js/PWA continua na raiz do repositorio.
 
+Os fluxos de descoberta por distância e por período, incluindo cadastro das coordenadas dos estabelecimentos, estão descritos em [DISCOVERY_FLOWS.md](DISCOVERY_FLOWS.md).
+
 ## Requisitos
 
 - Node.js compativel com Expo 57.

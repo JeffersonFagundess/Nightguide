@@ -6,6 +6,7 @@ import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { CommunityFeed } from '@/src/components/community-feed';
+import { DistanceSlider } from '@/src/components/distance-slider';
 import { Brand } from '@/src/components/brand';
 import { EventCard } from '@/src/components/event-card';
 import { LanguageSwitch } from '@/src/components/language-switch';
@@ -17,9 +18,11 @@ import { useUserData } from '@/src/providers/user-data-provider';
 import { colors } from '@/src/theme';
 import type { NightEvent, Venue } from '@/src/types';
 import { localizeVenueCategory } from '@/src/lib/i18n';
+import { distanceFromUserKm, formatDistance, hasValidCoordinates, savedLocationKey, type Coordinates } from '@/src/lib/distance';
+import { isEventInPeriod, type EventPeriod } from '@/src/lib/event-period';
 
 const filters = ['all', 'free', 'live', 'beach'] as const;
-const savedLocationKey = 'nightguide:discovery-location:v1';
+const periods: EventPeriod[] = ['all', 'today', 'week'];
 type Filter = (typeof filters)[number];
 
 export default function DiscoveryScreen() {
@@ -27,9 +30,11 @@ export default function DiscoveryScreen() {
   const { favoriteIds, toggleFavorite } = useUserData();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
+  const [period, setPeriod] = useState<EventPeriod>('all');
+  const [now, setNow] = useState(() => new Date());
   const [visibleVenueCount, setVisibleVenueCount] = useState(5);
 
-  const [userLocation, setUserLocation] = useState<Location.LocationObjectCoords | null>(null);
+  const [userLocation, setUserLocation] = useState<Coordinates | null>(null);
   const [loadingLocation, setLoadingLocation] = useState(false);
   const locationRequestId = useRef(0);
   const [locationSavedAt, setLocationSavedAt] = useState<string | null>(null);
@@ -44,15 +49,20 @@ export default function DiscoveryScreen() {
     let active = true;
     void AsyncStorage.getItem(savedLocationKey).then(raw => {
       if (!active || !raw) return;
-      const saved = JSON.parse(raw) as { latitude: number; longitude: number; savedAt: string };
-      if (Number.isFinite(saved.latitude) && Number.isFinite(saved.longitude)) {
-        setUserLocation({ latitude: saved.latitude, longitude: saved.longitude } as Location.LocationObjectCoords);
-        setLocationSavedAt(saved.savedAt);
+      const saved = JSON.parse(raw) as Coordinates & { savedAt: string };
+      if (hasValidCoordinates(saved)) {
+        setUserLocation({ latitude: saved.latitude, longitude: saved.longitude });
+        if (Number.isFinite(new Date(saved.savedAt).getTime())) setLocationSavedAt(saved.savedAt);
       }
     }).catch(() => {
       // A busca continua disponível mesmo se a leitura local falhar.
     });
     return () => { active = false; locationRequestId.current += 1; };
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(timer);
   }, []);
 
   const buscarLocalizacao = async () => {
@@ -64,7 +74,7 @@ export default function DiscoveryScreen() {
       if (status !== 'granted') {
         Alert.alert(
           'Permissão Negada',
-          'Precisamos da sua localização para sugerir eventos perto de você. O app continuará funcionando com a lista padrão.'
+          'Precisamos da sua localização para sugerir eventos perto de você. Se houver uma posição salva, ela continuará em uso.'
         );
         return;
       }
@@ -72,15 +82,15 @@ export default function DiscoveryScreen() {
       const currentLocation = await Location.getCurrentPositionAsync({});
       if (requestId !== locationRequestId.current) return;
       const { latitude, longitude } = currentLocation.coords;
-      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) throw new Error('Coordenadas inválidas');
+      if (!hasValidCoordinates({ latitude, longitude })) throw new Error('Coordenadas inválidas');
       const savedAt = new Date().toISOString();
       await AsyncStorage.setItem(savedLocationKey, JSON.stringify({ latitude, longitude, savedAt }));
       if (requestId !== locationRequestId.current) return;
-      setUserLocation(currentLocation.coords);
+      setUserLocation({ latitude, longitude });
       setLocationSavedAt(savedAt);
       Alert.alert('Localização salva', 'As coordenadas foram salvas neste aparelho e associadas à busca de eventos próximos.');
 
-    } catch (error) {
+    } catch {
       if (requestId !== locationRequestId.current) return;
       Alert.alert(
         'Erro de Localização',
@@ -98,18 +108,23 @@ export default function DiscoveryScreen() {
 
   const visible = useMemo(() => {
     const term = normalize(query);
-    return events.filter((event) => {
+    return events.flatMap((event) => {
       const searchable = normalize(`${event.title} ${event.venue} ${event.genre} ${event.highlight} ${event.mood}`);
-      return (!term || searchable.includes(term)) && matchesFilter(event, filter, searchRadius, userLocation);
-    });
-  }, [events, filter, query, searchRadius, userLocation]);
+      if ((term && !searchable.includes(term)) || !matchesFilter(event, filter) || !isEventInPeriod(event.startsAt, period, now)) return [];
+      const distance = distanceFromUserKm(userLocation, event);
+      if (userLocation && (distance === null || distance > searchRadius)) return [];
+      return [{ event, distance }];
+    }).sort((a, b) => userLocation ? (a.distance ?? Infinity) - (b.distance ?? Infinity) : 0);
+  }, [events, filter, now, period, query, searchRadius, userLocation]);
 
   const filteredVenues = useMemo(() => {
     const term = normalize(query);
     return venues.filter(venue =>
       (!term || normalize(`${venue.name} ${venue.category} ${venue.address}`).includes(term)) &&
-      (!userLocation || calcularDistancia(userLocation.latitude, userLocation.longitude, venue.latitude, venue.longitude) <= searchRadius)
-    );
+      (!userLocation || (distanceFromUserKm(userLocation, venue) ?? Infinity) <= searchRadius)
+    ).sort((a, b) => userLocation
+      ? (distanceFromUserKm(userLocation, a) ?? Infinity) - (distanceFromUserKm(userLocation, b) ?? Infinity)
+      : 0);
   }, [query, searchRadius, userLocation, venues]);
   const featuredVenues = useMemo(() => {
     const names = ['Restaurante Marisco', 'Villa Bistrô', 'P22'];
@@ -164,18 +179,33 @@ export default function DiscoveryScreen() {
           ))}
         </ScrollView>
 
-        {/* interface para disparar o recurso nativo de GPS com raio dinâmico */}
+        <View style={styles.periodSection}>
+          <Text style={styles.periodLabel}>{t.when}</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.periodOptions}>
+            {periods.map(item => (
+              <Pressable
+                key={item}
+                accessibilityRole="button"
+                accessibilityState={{ selected: period === item }}
+                onPress={() => setPeriod(item)}
+                style={[styles.periodOption, period === item && styles.periodOptionActive]}>
+                <Text style={[styles.periodOptionText, period === item && styles.periodOptionTextActive]}>{t.periods[item]}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+
         <View style={styles.locationContainer}>
           <View style={styles.radiusHeader}>
-            <Text style={styles.radiusLabel}>Raio de busca (GPS):</Text>
+            <Text style={styles.radiusLabel}>{t.radius}</Text>
             <Text style={styles.radiusValue}>{searchRadius} km</Text>
           </View>
-
+          <DistanceSlider value={searchRadius} onChange={setSearchRadius} label={t.radius} />
           <View style={styles.radiusControls}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Diminuir raio em 5 quilômetros" style={styles.radiusButton} onPress={() => setSearchRadius(current => Math.max(1, current - 5))}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t.decreaseRadius} style={styles.radiusButton} onPress={() => setSearchRadius(current => Math.max(1, current - 5))}>
               <Text style={styles.radiusButtonText}>−</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Aumentar raio em 5 quilômetros" style={styles.radiusButton} onPress={() => setSearchRadius(current => Math.min(100, current + 5))}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t.increaseRadius} style={styles.radiusButton} onPress={() => setSearchRadius(current => Math.min(100, current + 5))}>
               <Text style={styles.radiusButtonText}>+</Text>
             </Pressable>
           </View>
@@ -195,13 +225,14 @@ export default function DiscoveryScreen() {
           )}
           {userLocation && (
             <View>
-              <Text style={styles.coords}>📍 Localização salva · {userLocation.latitude.toFixed(5)}, {userLocation.longitude.toFixed(5)}</Text>
-              <Text style={styles.coords}>Eventos em até {searchRadius} km · salvo em {locationSavedAt ? new Date(locationSavedAt).toLocaleString('pt-BR') : 'este aparelho'}</Text>
+              <Text style={styles.coords}>{t.locationSaved} · {userLocation.latitude.toFixed(5)}, {userLocation.longitude.toFixed(5)}</Text>
+              <Text style={styles.coords}>{t.eventsWithin} {searchRadius} km · {t.savedAt} {locationSavedAt ? new Date(locationSavedAt).toLocaleString(language === 'pt' ? 'pt-BR' : 'en-US') : t.thisDevice}</Text>
             </View>
           )}
+          {!userLocation ? <Text style={styles.locationHint}>{t.enableLocation}</Text> : null}
         </View>
 
-        {!query && filter === 'all' ? (
+        {!query && filter === 'all' && period === 'all' ? (
           <>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>{t.featured}</Text>
@@ -214,10 +245,11 @@ export default function DiscoveryScreen() {
               snapToInterval={featuredCardWidth + 18}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.featuredList}>
-              {visible.slice(0, 2).map((event) => (
+              {visible.slice(0, 2).map(({ event, distance }) => (
                 <EventCard
                   key={event.id}
                   event={event}
+                  distanceKm={distance}
                   featured
                   featuredWidth={featuredCardWidth}
                   saved={favoriteIds.includes(event.id)}
@@ -234,10 +266,11 @@ export default function DiscoveryScreen() {
                   category={localizeVenueCategory(venue.category, language)}
                 />
               ))}
-              {visible.slice(2, 4).map((event) => (
+              {visible.slice(2, 4).map(({ event, distance }) => (
                 <EventCard
                   key={event.id}
                   event={event}
+                  distanceKm={distance}
                   featured
                   featuredWidth={featuredCardWidth}
                   saved={favoriteIds.includes(event.id)}
@@ -257,7 +290,7 @@ export default function DiscoveryScreen() {
               <View style={{ flex: 1, gap: 5 }}>
                 <Text style={styles.venueName}>{venue.name}</Text>
                 <Text style={styles.subtitleSmall}>{venue.photoIllustrative ? t.illustrative : venue.photoCredit}</Text>
-                <Text style={styles.subtitleSmall}>{localizeVenueCategory(venue.category, language)} · {venue.address}</Text>
+                <Text style={styles.subtitleSmall}>{localizeVenueCategory(venue.category, language)} · {venue.address}{userLocation ? ` · ${formatDistance(distanceFromUserKm(userLocation, venue)!, language)}` : ''}</Text>
                 <Text style={styles.source} numberOfLines={2}>{t.profile}</Text>
               </View>
             </Pressable>
@@ -278,14 +311,15 @@ export default function DiscoveryScreen() {
         <CommunityFeed />
 
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{query || filter !== 'all' ? t.results : t.upcoming}</Text>
+          <Text style={styles.sectionTitle}>{query || filter !== 'all' || period !== 'all' ? t.results : t.upcoming}</Text>
           <Text style={styles.count}>{visible.length}</Text>
         </View>
         <View style={styles.eventList}>
-          {visible.length ? visible.map((event) => (
+          {visible.length ? visible.map(({ event, distance }) => (
             <EventCard
               key={event.id}
               event={event}
+              distanceKm={distance}
               saved={favoriteIds.includes(event.id)}
               onToggleSaved={() => void toggleFavorite(event)}
             />
@@ -316,7 +350,11 @@ const copy = {
     openVenue: 'ABRIR PERFIL E AVALIAÇÕES →',
     moreVenues: 'Ver mais estabelecimentos',
     onlyFiveVenues: 'Mostrar apenas 5 estabelecimentos',
+    radius: 'Distância máxima dos eventos', decreaseRadius: 'Diminuir raio em 5 quilômetros', increaseRadius: 'Aumentar raio em 5 quilômetros',
+    locationSaved: 'Localização salva', eventsWithin: 'Eventos em até', savedAt: 'salvo em', thisDevice: 'este aparelho',
+    enableLocation: 'Ative o GPS para filtrar por distância e ver os quilômetros de cada evento.',
     filters: { all: 'Tudo', free: 'Grátis', live: 'Ao vivo', beach: 'Praia' },
+    when: 'Quando', periods: { all: 'Todos', today: 'Hoje', week: 'Próximos 7 dias' },
   },
   en: {
     eyebrow: 'YOUR NIGHT STARTS HERE',
@@ -335,7 +373,11 @@ const copy = {
     openVenue: 'OPEN PROFILE AND REVIEWS →',
     moreVenues: 'See more venues',
     onlyFiveVenues: 'Show only 5 venues',
+    radius: 'Maximum event distance', decreaseRadius: 'Decrease radius by 5 kilometers', increaseRadius: 'Increase radius by 5 kilometers',
+    locationSaved: 'Location saved', eventsWithin: 'Events within', savedAt: 'saved at', thisDevice: 'this device',
+    enableLocation: 'Enable GPS to filter by distance and see how far each event is.',
     filters: { all: 'All', free: 'Free', live: 'Live', beach: 'Beach' },
+    when: 'When', periods: { all: 'All', today: 'Today', week: 'Next 7 days' },
   },
 } as const;
 
@@ -343,37 +385,8 @@ function normalize(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
 
-function calcularDistancia(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371; // Raio da Terra em km
-  const dLat = (lat2 - lat1) * (Math.PI / 180);
-  const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-function matchesFilter(event: NightEvent, filter: Filter, radius: number, userLocation: Location.LocationObjectCoords | null) {
+function matchesFilter(event: NightEvent, filter: Filter) {
   const text = normalize(`${event.genre} ${event.mood} ${event.venue} ${event.highlight}`);
-
-  if (userLocation !== null) {
-    if (event.latitude != null && event.longitude != null && Number.isFinite(event.latitude) && Number.isFinite(event.longitude)) {
-      const distanciaReal = calcularDistancia(
-        userLocation.latitude,
-        userLocation.longitude,
-        event.latitude,
-        event.longitude
-      );
-
-      if (distanciaReal > radius) {
-        return false;
-      }
-    } else return false;
-  }
-
-  // Filtros normais
   if (filter === 'free') return normalize(event.price).includes('gratis');
   if (filter === 'live') return text.includes('ao vivo') || text.includes('samba') || text.includes('rock');
   if (filter === 'beach') return text.includes('praia') || text.includes('orla') || text.includes('mar');
@@ -423,11 +436,19 @@ const styles = StyleSheet.create({
   filters: { paddingHorizontal: 18, paddingVertical: 16, gap: 9 },
   filter: { overflow: 'hidden', color: colors.muted, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 15, paddingVertical: 10, borderRadius: 999, fontSize: 13, fontWeight: '800' },
   filterActive: { color: colors.ink, backgroundColor: colors.accent, borderColor: colors.accent },
+  periodSection: { paddingHorizontal: 18, marginBottom: 18, gap: 9 },
+  periodLabel: { color: colors.muted, fontSize: 12, fontWeight: '800' },
+  periodOptions: { flexDirection: 'row', gap: 8 },
+  periodOption: { paddingVertical: 9, paddingHorizontal: 11, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  periodOptionActive: { borderColor: colors.accent, backgroundColor: colors.accent },
+  periodOptionText: { color: colors.muted, fontSize: 12, fontWeight: '800' },
+  periodOptionTextActive: { color: colors.ink },
 
-  locationContainer: { paddingHorizontal: 18, marginBottom: 15, alignItems: 'flex-start' },
+  locationContainer: { paddingHorizontal: 18, marginBottom: 15 },
   locationButton: { flexDirection: 'row', backgroundColor: colors.accent, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center', gap: 8 },
   locationButtonText: { color: colors.ink, fontWeight: '800', fontSize: 14 },
   coords: { marginTop: 10, color: colors.accent, fontWeight: '800', fontSize: 12 },
+  locationHint: { marginTop: 9, color: colors.muted, fontSize: 12, lineHeight: 18 },
 
   sectionHeader: { marginTop: 18, marginBottom: 14, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sectionTitle: { color: colors.text, fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },

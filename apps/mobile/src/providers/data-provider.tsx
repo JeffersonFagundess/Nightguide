@@ -6,9 +6,10 @@ import realVenues from '@/src/data/real-venues.json';
 import { venuePhoto } from '@/src/data/venue-photos';
 const localVenues = realVenues.map(venue => ({ ...venue, ...venuePhoto(venue.name, venue.category) }));
 import { supabase } from '@/src/lib/supabase';
+import { hasValidCoordinates } from '@/src/lib/distance';
 import type { NightEvent, Venue } from '@/src/types';
 
-const cacheKey = 'nightguide:home-cache:v4';
+const cacheKey = 'nightguide:home-cache:v5';
 
 type HomeCache = { events: NightEvent[]; venues: Venue[] };
 type DataContextValue = HomeCache & {
@@ -43,6 +44,7 @@ export function DataProvider({ children }: PropsWithChildren) {
           .from('events')
           .select('id,venue_id,title,description,starts_at,cover_url,price,genre,mood,venues(name,latitude,longitude)')
           .eq('status', 'published')
+          .gte('starts_at', new Date().toISOString())
           .order('starts_at', { ascending: true })
           .limit(50),
         supabase
@@ -58,8 +60,8 @@ export function DataProvider({ children }: PropsWithChildren) {
       const nextEvents = (eventsResult.data || []).map(mapEvent).filter((event): event is NightEvent => Boolean(event));
       const nextVenues = (venuesResult.data || []).map(mapVenue).filter((venue): venue is Venue => Boolean(venue));
       const data = {
-        events: nextEvents.length ? nextEvents : fallbackEvents,
-        venues: nextVenues.length ? nextVenues : localVenues,
+        events: nextEvents.length || nextVenues.length ? nextEvents : fallbackEvents,
+        venues: nextEvents.length || nextVenues.length ? nextVenues : localVenues,
       };
       setEvents(data.events);
       setVenues(data.venues);
@@ -105,6 +107,11 @@ function mapEvent(row: Record<string, unknown>): NightEvent | null {
   if (!row.id || !row.title || !row.starts_at) return null;
   const venueRelation = Array.isArray(row.venues) ? row.venues[0] : row.venues;
   const venue = (venueRelation || {}) as Record<string, unknown>;
+  const verifiedVenue = realVenues.find(item => item.name === venue.name);
+  const coordinates = verifiedVenue || {
+    latitude: venue.latitude == null ? NaN : Number(venue.latitude),
+    longitude: venue.longitude == null ? NaN : Number(venue.longitude),
+  };
   const startsAt = new Date(String(row.starts_at));
   const price = Number(row.price || 0);
 
@@ -121,9 +128,8 @@ function mapEvent(row: Record<string, unknown>): NightEvent | null {
     image: String(row.cover_url || fallbackEvents[0].image),
     highlight: String(row.description || 'Evento em destaque no NightGuide.'),
     mood: String(row.mood || row.genre || 'Ao vivo'),
-    distance: 'Saquarema',
-    latitude: venue.latitude == null ? undefined : Number(venue.latitude),
-    longitude: venue.longitude == null ? undefined : Number(venue.longitude),
+    latitude: hasValidCoordinates(coordinates) ? coordinates.latitude : undefined,
+    longitude: hasValidCoordinates(coordinates) ? coordinates.longitude : undefined,
   };
 }
 
@@ -131,6 +137,8 @@ function mapVenue(row: Record<string, unknown>): Venue | null {
   if (!row.id || !row.name || row.latitude == null || row.longitude == null) return null;
   const name = String(row.name);
   const verifiedVenue = realVenues.find(venue => venue.name === name);
+  const coordinates = verifiedVenue || { latitude: Number(row.latitude), longitude: Number(row.longitude) };
+  if (!hasValidCoordinates(coordinates)) return null;
   const photo = venuePhoto(name, String(row.category || 'Restaurante'));
   const uploadedCover = !verifiedVenue && typeof row.cover_url === 'string' && row.cover_url.trim() ? row.cover_url : undefined;
   return {
@@ -138,8 +146,8 @@ function mapVenue(row: Record<string, unknown>): Venue | null {
     name,
     category: String(row.category || 'Bar e evento'),
     rating: Number(row.rating || 0),
-    latitude: verifiedVenue?.latitude ?? Number(row.latitude),
-    longitude: verifiedVenue?.longitude ?? Number(row.longitude),
+    latitude: coordinates.latitude,
+    longitude: coordinates.longitude,
     address: verifiedVenue?.address ?? String(row.address || 'Saquarema'),
     vibe: String(row.description || row.category || 'Noite local'),
     ...photo,

@@ -6,6 +6,7 @@ import { colors } from '@/src/theme';
 import type { NightEvent } from '@/src/types';
 import { usePreferences } from '@/src/providers/preferences-provider';
 import { localizeEventText } from '@/src/lib/i18n';
+import { formatDistance } from '@/src/lib/distance';
 
 type Props = {
   event: NightEvent;
@@ -13,9 +14,10 @@ type Props = {
   onToggleSaved: () => void;
   featured?: boolean;
   featuredWidth?: number;
+  distanceKm?: number | null;
 };
 
-export function EventCard({ event, saved, onToggleSaved, featured = false, featuredWidth }: Props) {
+export function EventCard({ event, saved, onToggleSaved, featured = false, featuredWidth, distanceKm }: Props) {
   const { language } = usePreferences();
   return (
     <Pressable
@@ -42,6 +44,7 @@ export function EventCard({ event, saved, onToggleSaved, featured = false, featu
         <View style={styles.metaRow}>
           <MapPin size={14} color={colors.muted} />
           <Text style={styles.meta} numberOfLines={1}>{event.venue}</Text>
+          {distanceKm != null ? <Text style={styles.distance}>{formatDistance(distanceKm, language)}</Text> : null}
         </View>
         <View style={styles.bottomRow}>
           <View style={styles.metaRow}>
@@ -70,6 +73,7 @@ const styles = StyleSheet.create({
   titleFeatured: { fontSize: 31, lineHeight: 34 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
   meta: { color: colors.muted, fontSize: 14, flexShrink: 1 },
+  distance: { color: colors.accent, fontSize: 13, fontWeight: '900', marginLeft: 'auto' },
   bottomRow: { marginTop: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   date: { color: colors.text, fontSize: 13, fontWeight: '700' },
   price: { color: colors.accent, fontSize: 14, fontWeight: '900' },
