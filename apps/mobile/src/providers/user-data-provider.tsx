@@ -15,7 +15,7 @@ type UserDataContextValue = {
   tickets: Ticket[];
   reviews: Review[];
   toggleFavorite: (event: NightEvent) => Promise<boolean>;
-  createTicket: (event: NightEvent, quantity: number, paymentLabel: string, provider?: Ticket['provider']) => Promise<Ticket>;
+  createTicket: (event: NightEvent, quantity: number, paymentLabel: string, provider?: Ticket['provider'], providerPaymentId?: string) => Promise<Ticket>;
   cancelTicket: (ticketId: string) => Promise<void>;
   addReview: (input: Omit<Review, 'id' | 'createdAt'>) => Promise<Review>;
   deleteReview: (reviewId: string) => Promise<void>;
@@ -129,7 +129,9 @@ export function UserDataProvider({ children }: PropsWithChildren) {
   );
 
   const createTicket = useCallback(
-    async (event: NightEvent, quantity: number, paymentLabel: string, provider: Ticket['provider'] = 'demo') => {
+    async (event: NightEvent, quantity: number, paymentLabel: string, provider: Ticket['provider'] = 'demo', providerPaymentId?: string) => {
+      const existing = providerPaymentId ? tickets.find(item => item.providerPaymentId === providerPaymentId) : undefined;
+      if (existing) return existing;
       const ticket: Ticket = {
         id: `NG-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
         eventId: event.id,
@@ -144,6 +146,7 @@ export function UserDataProvider({ children }: PropsWithChildren) {
         createdAt: new Date().toISOString(),
         buyerEmail: user?.email || 'visitante@nightguide.app',
         provider,
+        providerPaymentId,
       };
       const next = [ticket, ...tickets];
       setTickets(next);

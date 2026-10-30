@@ -173,6 +173,10 @@ Observacao:
 - `checkoutUrl` deve ser aberto no navegador.
 - O usuario deve pagar com comprador de teste diferente do vendedor.
 
+## GET /api/payments/mercadopago/preference/[preferenceId]
+
+Consulta o status do checkout do APK. Exige sessao autenticada (Bearer no app) e `?eventId=...`. O servidor valida a preferencia, o comprador, o evento, a referencia externa e o valor antes de retornar o pagamento. `status` pode ser `approved`, `pending`, `rejected` ou `not_found`. Somente `approved` libera o ingresso.
+
 ## POST /api/mercadopago/webhook
 
 Recebe notificacoes do Mercado Pago.

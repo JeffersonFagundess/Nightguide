@@ -36,7 +36,7 @@ A base Expo/React Native fica em `apps/mobile`. Ela convive com a versao web e i
 - Login com Google via Supabase Auth.
 - Conta nativa com nome, foto, capa como fundo do cartao e descricao; atalhos para favoritos, publicacoes e ingressos.
 - Conta de dono com edicao de perfil do estabelecimento e eventos locais.
-- Compra de ingresso teste por cartao, Pix visual e Checkout Pro.
+- Compra de ingresso teste por cartao, Pix da API e Checkout Pro.
 - Mensagem de pagamento confirmado dentro da tela.
 - PWA instalavel no celular e cache de paginas/imagens.
 - Idioma portugues/ingles e tema claro/escuro.
@@ -130,10 +130,10 @@ docs                            Documentacao detalhada
 O app tem tres caminhos:
 
 - Cartao via API do Mercado Pago usando cartoes oficiais de teste.
-- Pix com fluxo visual no NightGuide. Quando o Mercado Pago de teste aceita, o app usa o QR retornado pela API. Quando a sandbox recusa por restricao de conta, o app gera um Pix de demonstracao e deixa claro que e teste.
-- Checkout Pro redirecionando para o Mercado Pago quando usado pelo botao correspondente.
+- Pix com QR retornado pela API e ingresso somente apos status `approved`.
+- Checkout Pro no APK com verificacao do pagamento pela API antes de gerar o ingresso.
 
-Nenhuma cobranca real e feita com credenciais `TEST-`.
+Veja [docs/PAYMENTS.md](docs/PAYMENTS.md) para configurar credenciais e contas de teste.
 
 ## Banco e seguranca
 

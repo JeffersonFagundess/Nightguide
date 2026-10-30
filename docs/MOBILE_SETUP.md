@@ -59,7 +59,7 @@ O Google e opcional. Para habilitar:
 
 O app nativo chama as rotas seguras da versao Next.js definida em `EXPO_PUBLIC_API_URL`. As rotas aceitam a sessao Supabase nativa pelo header `Authorization: Bearer ...`; o Access Token do Mercado Pago continua somente no servidor.
 
-Credenciais de teste continuam obrigatorias. A simulacao local e rotulada como demonstracao e nunca realiza cobranca real.
+Credenciais de teste continuam obrigatorias no backend. O APK abre o Checkout Pro e consulta a preferencia e seus pagamentos antes de liberar o ingresso. A simulacao local continua rotulada como demonstracao e nao representa um pagamento do Mercado Pago.
 
 ## Recursos nativos presentes
 
@@ -128,5 +128,5 @@ depois reabra em modo aviao. Atualizacoes publicas de outro aparelho dependem do
 envio online do autor e de atualizar/abrir novamente o feed ou perfil.
 
 `pnpm test:profile` executa testes de persistencia/edicao do perfil e privacidade,
-cache offline e troca de fotos do perfil publico. A publicacao do APK `1.3.0`
+cache offline e troca de fotos do perfil publico. A publicacao do APK `1.3.1`
 e automatica em Releases ao concluir com sucesso o workflow da branch `main`.

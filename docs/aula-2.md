@@ -16,7 +16,7 @@
 ## Recurso Nativo
 
 - Recurso: GPS/localização em primeiro plano via `expo-location`.
-- Início: botão de GPS na aba inicial; controle de raio de 1 a 100 km.
+- Início: botão de GPS na aba inicial; controle de raio de 0 a 100 km.
 - Meio: solicitação nativa de permissão em tempo de execução e leitura das coordenadas. Durante a busca, há indicador de progresso e botão **Cancelar**. O cancelamento ignora qualquer resposta posterior da leitura em andamento.
 - Fim: coordenadas válidas são gravadas no armazenamento local do aparelho; depois da gravação, a tela exibe latitude, longitude, raio e horário do registro. O botão **Atualizar localização (GPS)** permite substituir o dado.
 - Desvios: permissão negada mostra alerta; cancelamento não altera a localização exibida; falha na leitura ou gravação mostra erro e preserva o registro anterior.

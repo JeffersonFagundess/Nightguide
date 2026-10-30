@@ -5,7 +5,6 @@ import {
   getTicketTotal,
   mercadoPagoFetch,
   normalizeMercadoPagoPayment,
-  isRecoverableMercadoPagoTestError,
   type MercadoPagoNormalizedPayment,
 } from "@/lib/mercadopago-server";
 
@@ -108,10 +107,7 @@ export async function POST(request: Request) {
             ...(body.issuerId ? { issuer_id: Number(body.issuerId) } : {}),
           };
 
-    let normalized: MercadoPagoNormalizedPayment;
-
-    try {
-      const payment = await mercadoPagoFetch<MercadoPagoPaymentResponse>("/v1/payments", {
+    const payment = await mercadoPagoFetch<MercadoPagoPaymentResponse>("/v1/payments", {
         method: "POST",
         headers: {
           "X-Idempotency-Key": idempotencyKey,
@@ -119,7 +115,7 @@ export async function POST(request: Request) {
         body: JSON.stringify(paymentBody),
       });
 
-      normalized = normalizeMercadoPagoPayment(payment);
+    const normalized = normalizeMercadoPagoPayment(payment);
       console.info("[NightGuide][MercadoPago][payment:created]", {
         debugId,
         paymentId: normalized.id,
@@ -128,18 +124,6 @@ export async function POST(request: Request) {
         paymentMethodId: normalized.paymentMethodId,
         paymentTypeId: normalized.paymentTypeId,
       });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "";
-      console.warn("[NightGuide][MercadoPago][payment:error]", { debugId, message });
-      if (!isRecoverableMercadoPagoTestError(message)) throw error;
-      normalized = createFallbackTestPayment({ method, total, testStatus: body.testStatus });
-      console.info("[NightGuide][MercadoPago][payment:fallback]", {
-        debugId,
-        paymentId: normalized.id,
-        status: normalized.status,
-        statusDetail: normalized.statusDetail,
-      });
-    }
 
     return NextResponse.json(
       {
@@ -162,83 +146,6 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ debugId, error: error instanceof Error ? error.message : "Erro inesperado no Mercado Pago." }, { status: 500 });
   }
-}
-
-function createFallbackTestPayment({
-  method,
-  total,
-  testStatus,
-}: {
-  method: "card" | "pix";
-  total: number;
-  testStatus?: string;
-}): MercadoPagoNormalizedPayment {
-  const normalizedStatus = (testStatus || "APRO").toUpperCase();
-  const pixTxId = `NG${Date.now().toString(36).toUpperCase()}`;
-  const status =
-    method === "pix" || normalizedStatus === "CONT"
-      ? "pending"
-      : normalizedStatus === "APRO"
-        ? "approved"
-        : "rejected";
-
-  return {
-    id: method === "pix" ? `PIX-${pixTxId}` : `900${Date.now()}`,
-    status,
-    statusDetail: method === "pix" ? "pending_waiting_transfer" : getFallbackStatusDetail(normalizedStatus, status),
-    paymentMethodId: method === "pix" ? "pix" : "sandbox_card",
-    paymentTypeId: method === "pix" ? "bank_transfer" : "credit_card",
-    totalPaidAmount: status === "approved" ? total : 0,
-    qrCode: method === "pix" ? buildPixPayload({ total, txId: pixTxId }) : undefined,
-    expiresAt: method === "pix" ? new Date(Date.now() + 30 * 60 * 1000).toISOString() : undefined,
-  };
-}
-
-function buildPixPayload({ total, txId }: { total: number; txId: string }) {
-  const merchantAccount = emv("00", "BR.GOV.BCB.PIX") + emv("01", "pagamentos@nightguide.test") + emv("02", "NIGHTGUIDE TESTE");
-  const additionalData = emv("05", txId.slice(0, 25));
-  const amount = total.toFixed(2);
-  const payload =
-    emv("00", "01") +
-    emv("26", merchantAccount) +
-    emv("52", "0000") +
-    emv("53", "986") +
-    emv("54", amount) +
-    emv("58", "BR") +
-    emv("59", "NIGHTGUIDE TESTE") +
-    emv("60", "SAQUAREMA") +
-    emv("62", additionalData) +
-    "6304";
-
-  return `${payload}${crc16(payload)}`;
-}
-
-function emv(id: string, value: string) {
-  return `${id}${String(value.length).padStart(2, "0")}${value}`;
-}
-
-function crc16(value: string) {
-  let crc = 0xffff;
-  for (let index = 0; index < value.length; index += 1) {
-    crc ^= value.charCodeAt(index) << 8;
-    for (let bit = 0; bit < 8; bit += 1) {
-      crc = crc & 0x8000 ? (crc << 1) ^ 0x1021 : crc << 1;
-      crc &= 0xffff;
-    }
-  }
-
-  return crc.toString(16).toUpperCase().padStart(4, "0");
-}
-
-function getFallbackStatusDetail(testStatus: string, status: string) {
-  if (status === "approved") return "accredited";
-  if (testStatus === "CONT") return "pending_contingency";
-  if (testStatus === "CALL") return "cc_rejected_call_for_authorize";
-  if (testStatus === "FUND") return "cc_rejected_insufficient_amount";
-  if (testStatus === "SECU") return "cc_rejected_bad_filled_security_code";
-  if (testStatus === "EXPI") return "cc_rejected_bad_filled_date";
-  if (testStatus === "FORM") return "cc_rejected_bad_filled_other";
-  return "cc_rejected_other_reason";
 }
 
 function clampQuantity(value: unknown) {

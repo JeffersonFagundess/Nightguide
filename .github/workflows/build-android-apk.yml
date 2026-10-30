@@ -54,6 +54,9 @@ jobs:
           node --experimental-strip-types --test tests/distance.test.mjs tests/event-period.test.mjs
         working-directory: apps/mobile
 
+      - name: Check checkout matching
+        run: node --experimental-strip-types --test tests/mercadopago-checkout.test.mjs
+
       - name: Generate Android project
         run: pnpm exec expo prebuild --platform android --clean --no-install
         working-directory: apps/mobile

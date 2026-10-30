@@ -1,6 +1,6 @@
 # Pagamentos Mercado Pago
 
-O NightGuide usa Mercado Pago em ambiente de teste para simular compra de ingressos. O objetivo do MVP e demonstrar o fluxo do usuario, webhooks e confirmacao visual sem fazer cobranca real.
+O NightGuide usa o Mercado Pago para testar a compra de ingressos. A API decide o status: um retorno do navegador ou um botao no app nunca aprova o pagamento sozinho.
 
 ## Variaveis
 
@@ -22,6 +22,7 @@ POST /api/payments/mercadopago/card-token
 POST /api/payments/mercadopago
 GET  /api/payments/mercadopago/[paymentId]
 POST /api/payments/mercadopago/preference
+GET  /api/payments/mercadopago/preference/[preferenceId]?eventId=...
 POST /api/mercadopago/webhook
 GET  /api/mercadopago/webhook
 ```
@@ -31,7 +32,7 @@ GET  /api/mercadopago/webhook
 Fluxo:
 
 1. Usuario logado escolhe evento e quantidade.
-2. Frontend tokeniza o cartao usando a Public Key.
+2. O formulario web envia os dados de teste para tokenizacao com a Public Key.
 3. Backend recebe token, evento, quantidade e metodo.
 4. Backend chama `/v1/payments` do Mercado Pago usando Access Token.
 5. Se aprovado, o app mostra confirmacao na tela e salva ingresso local.
@@ -39,7 +40,7 @@ Fluxo:
 
 Status de teste:
 
-- `APRO`: aprovado
+- `APRO`: aprovado (CPF 12345678909)
 - `OTHE`: erro geral
 - `CONT`: pendente
 - `CALL`: precisa autorizar
@@ -56,14 +57,10 @@ Fluxo ideal:
 2. Backend cria pagamento `payment_method_id: pix`.
 3. Mercado Pago retorna QR Code e copia e cola.
 4. App abre modal Pix com QR, codigo e status.
-5. Usuario copia o codigo.
-6. Em teste, usuario confirma a simulacao para liberar o ingresso.
+5. Usuario copia o codigo e consulta o status.
+6. O ingresso so e liberado se a API do Mercado Pago responder `approved`.
 
-Comportamento do MVP:
-
-- Se o Mercado Pago retornar QR real, o app usa os dados retornados.
-- Se a sandbox negar por restricao de conta/teste, o app gera um Pix visual de demonstracao.
-- O fallback fica identificado como teste e nao representa uma cobranca real.
+Se o Mercado Pago recusar a criacao do Pix, o erro e mostrado. Nao e gerado QR alternativo nem ingresso pago.
 
 ## Checkout Pro
 
@@ -72,17 +69,25 @@ Fluxo:
 1. Usuario clica para ir ao Mercado Pago.
 2. Backend cria uma preferencia em `/checkout/preferences`.
 3. Retorna `init_point` ou `sandbox_init_point`.
-4. Browser abre o checkout oficial do Mercado Pago.
-5. Usuario paga com comprador de teste.
-6. Mercado Pago volta para as `back_urls`.
-7. Webhook e enviado para `/api/mercadopago/webhook`.
+4. O APK abre o `init_point` oficial no navegador do Mercado Pago.
+5. Usuario usa uma conta compradora de teste diferente da vendedora e um cartao oficial de teste.
+6. O retorno HTTPS mostra um link para voltar ao app. Ao fechar o navegador, o app consulta `GET /api/payments/mercadopago/preference/[preferenceId]` e permite tocar em **Verificar pagamento** novamente.
+7. O servidor busca a preferencia e os pagamentos pela `external_reference` exclusiva. Confere usuario, evento e valor; so `approved` gera ingresso. `pending`, `rejected` e ausencia de pagamento nao geram ingresso.
+8. Webhook e enviado para `/api/mercadopago/webhook`.
 
-Para Checkout Pro funcionar em sandbox:
+Cartoes oficiais de teste (validade `11/30`): Mastercard `5480 8328 0103 3311`, Visa `4235 6477 2802 5682`, American Express `3753 651535 56885` (CVV `1234`) e Elo debito `5067 7667 8388 8311`. Os demais usam CVV `123`. Nome `APRO` aprova; `OTHE` recusa; `CONT` deixa pendente; CPF `12345678909`.
 
-- Access Token deve pertencer ao vendedor de teste.
+Para Checkout Pro funcionar em teste:
+
+- Access Token deve pertencer ao vendedor de teste e estar no mesmo ambiente da aplicacao Mercado Pago.
 - Pagamento deve ser feito com comprador de teste diferente.
 - Nao use a mesma conta real como comprador e vendedor.
-- Evite cookies antigos de outra conta no navegador do Mercado Pago.
+- Evite cookies antigos de outra conta no navegador do Mercado Pago. Se necessario, teste em janela anonima.
+- O e-mail do comprador deve ser diferente do e-mail da conta vendedora.
+
+Sem credenciais de teste configuradas no deploy e uma conta compradora de teste, o checkout de cartao nao pode ser validado de ponta a ponta. Nao coloque chaves no Git; configure-as nas variaveis do ambiente de hospedagem.
+
+Referencias oficiais: [cartoes de teste](https://www.mercadopago.com.br/developers/pt/docs/checkout-pro-preferences/integration-test/test-purchases), [contas de teste](https://www.mercadopago.com.br/developers/pt/docs/checkout-pro-preferences/test-accounts) e [busca de pagamentos](https://www.mercadopago.com.br/developers/pt/reference/online-payments/subscriptions/search-payments/get).
 
 ## Webhook
 
@@ -124,7 +129,7 @@ Exemplo:
 ## Limitacoes de teste
 
 - Conta compradora e vendedora precisam ser diferentes.
-- Credenciais `TEST-` nao fazem cobranca real.
+- Use sempre as credenciais do ambiente de teste; confirme o tipo de token na integracao do Mercado Pago.
 - Algumas operacoes de Pix podem variar conforme a conta de teste.
 - O checkout externo pode manter cookies do Mercado Pago.
 - O painel pode demorar para exibir metricas.

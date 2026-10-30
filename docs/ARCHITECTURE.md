@@ -135,7 +135,7 @@ O app possui:
 - API de preferencia Checkout Pro
 - API de tokenizacao de cartao
 - webhook para eventos Mercado Pago
-- fallback de Pix visual quando a sandbox recusa o fluxo por restricao de conta
+- consulta do pagamento no Mercado Pago antes de liberar ingresso no Pix ou no Checkout Pro do APK
 
 O Access Token fica apenas no servidor.
 

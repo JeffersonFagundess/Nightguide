@@ -2,6 +2,8 @@ import { getHomeData } from "@/lib/data";
 import { parseEventPrice } from "@/lib/fake-tickets";
 import { fallbackEvents } from "@/lib/mock-data";
 import type { FeaturedEvent } from "@/lib/types";
+import { hasSupabaseEnv } from "@/lib/supabase/env";
+import { createClient } from "@/lib/supabase/server";
 
 const mercadoPagoBaseUrl = "https://api.mercadopago.com";
 
@@ -49,6 +51,28 @@ export function getMercadoPagoAccessToken() {
 }
 
 export async function findCheckoutEvent(eventId: string) {
+  if (hasSupabaseEnv() && /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(eventId)) {
+    const supabase = await createClient();
+    const { data, error } = await supabase.from("events")
+      .select("id,title,starts_at,price,genre,cover_url,description,venues(name)")
+      .eq("id", eventId).eq("status", "published").single();
+    if (error || !data) return null;
+    const venue = Array.isArray(data.venues) ? data.venues[0]?.name : (data.venues as { name?: string } | null)?.name;
+    const startsAt = new Date(data.starts_at);
+    return {
+      id: data.id,
+      title: data.title,
+      venue: venue ?? "Local a confirmar",
+      date: startsAt.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit" }),
+      time: startsAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+      genre: data.genre ?? "Evento",
+      price: Number(data.price) > 0 ? `R$ ${Number(data.price).toFixed(2)}` : "Grátis",
+      image: data.cover_url ?? fallbackEvents[0].image,
+      highlight: data.description ?? "Evento NightGuide.",
+      mood: data.genre ?? "Ao vivo",
+      distance: "Saquarema",
+    } satisfies FeaturedEvent;
+  }
   const { events } = await getHomeData();
   return events.find((item) => item.id === eventId) ?? fallbackEvents.find((item) => item.id === eventId) ?? null;
 }
@@ -95,10 +119,6 @@ export async function mercadoPagoFetch<T>(path: string, init: RequestInit = {}) 
   }
 
   return data as T;
-}
-
-export function isRecoverableMercadoPagoTestError(message: string) {
-  return /communication_error|invalid users involved|payer email forbidden|payer\.email|http 500/i.test(message);
 }
 
 function formatMercadoPagoError(error: MercadoPagoPaymentResponse) {

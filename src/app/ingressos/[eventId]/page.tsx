@@ -10,18 +10,13 @@ import { fallbackEvents } from "@/lib/mock-data";
 
 export default async function TicketPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ eventId: string }>;
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { eventId } = await params;
-  const query = (await searchParams) ?? {};
   const { events } = await getHomeData();
   const event = events.find((item) => item.id === eventId) ?? fallbackEvents.find((item) => item.id === eventId) ?? fallbackEvents[0];
   const session = await getCurrentSession();
-  const status = getQueryValue(query.mp_status) || getQueryValue(query.status) || getQueryValue(query.collection_status);
-  const paymentId = getQueryValue(query.payment_id) || getQueryValue(query.collection_id) || getQueryValue(query.preference_id);
 
   if (!session) {
     redirect(`/login?next=/ingressos/${eventId}`);
@@ -51,7 +46,7 @@ export default async function TicketPage({
         </div>
 
         <div className="grid gap-3">
-          <FakeCheckout event={event} buyerEmail={session.email} initialPayment={status ? { id: paymentId, status } : undefined} />
+          <FakeCheckout event={event} buyerEmail={session.email} />
           <Link
             href="/"
             className="inline-flex min-h-11 w-full items-center justify-center rounded-[6px] border border-white/10 px-4 font-semibold text-[color:var(--foreground)]"
@@ -63,10 +58,6 @@ export default async function TicketPage({
       <Footer />
     </main>
   );
-}
-
-function getQueryValue(value: string | string[] | undefined) {
-  return Array.isArray(value) ? value[0] : value;
 }
 
 function Info({ label, value }: { label: string; value: string }) {

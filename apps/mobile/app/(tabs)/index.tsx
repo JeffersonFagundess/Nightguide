@@ -18,7 +18,7 @@ import { useUserData } from '@/src/providers/user-data-provider';
 import { colors } from '@/src/theme';
 import type { NightEvent, Venue } from '@/src/types';
 import { localizeVenueCategory } from '@/src/lib/i18n';
-import { distanceFromUserKm, formatDistance, hasValidCoordinates, savedLocationKey, type Coordinates } from '@/src/lib/distance';
+import { distanceFromUserKm, formatDistance, hasValidCoordinates, isWithinRadiusKm, savedLocationKey, type Coordinates } from '@/src/lib/distance';
 import { isEventInPeriod, type EventPeriod } from '@/src/lib/event-period';
 
 const filters = ['all', 'free', 'live', 'beach'] as const;
@@ -39,6 +39,7 @@ export default function DiscoveryScreen() {
   const locationRequestId = useRef(0);
   const [locationSavedAt, setLocationSavedAt] = useState<string | null>(null);
   const [searchRadius, setSearchRadius] = useState(10); // Raio inicial de 10km
+  const [distanceFilterActive, setDistanceFilterActive] = useState(false);
 
   const { language } = usePreferences();
   const { width: windowWidth } = useWindowDimensions();
@@ -52,6 +53,7 @@ export default function DiscoveryScreen() {
       const saved = JSON.parse(raw) as Coordinates & { savedAt: string };
       if (hasValidCoordinates(saved)) {
         setUserLocation({ latitude: saved.latitude, longitude: saved.longitude });
+        setDistanceFilterActive(true);
         if (Number.isFinite(new Date(saved.savedAt).getTime())) setLocationSavedAt(saved.savedAt);
       }
     }).catch(() => {
@@ -67,6 +69,7 @@ export default function DiscoveryScreen() {
 
   const buscarLocalizacao = async () => {
     const requestId = ++locationRequestId.current;
+    setDistanceFilterActive(true);
     setLoadingLocation(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -106,26 +109,31 @@ export default function DiscoveryScreen() {
     setLoadingLocation(false);
   };
 
+  const changeRadius = (value: number) => {
+    setSearchRadius(value);
+    setDistanceFilterActive(true);
+  };
+
   const visible = useMemo(() => {
     const term = normalize(query);
     return events.flatMap((event) => {
       const searchable = normalize(`${event.title} ${event.venue} ${event.genre} ${event.highlight} ${event.mood}`);
       if ((term && !searchable.includes(term)) || !matchesFilter(event, filter) || !isEventInPeriod(event.startsAt, period, now)) return [];
       const distance = distanceFromUserKm(userLocation, event);
-      if (userLocation && (distance === null || distance > searchRadius)) return [];
+      if (distanceFilterActive && !isWithinRadiusKm(distance, searchRadius)) return [];
       return [{ event, distance }];
     }).sort((a, b) => userLocation ? (a.distance ?? Infinity) - (b.distance ?? Infinity) : 0);
-  }, [events, filter, now, period, query, searchRadius, userLocation]);
+  }, [distanceFilterActive, events, filter, now, period, query, searchRadius, userLocation]);
 
   const filteredVenues = useMemo(() => {
     const term = normalize(query);
     return venues.filter(venue =>
       (!term || normalize(`${venue.name} ${venue.category} ${venue.address}`).includes(term)) &&
-      (!userLocation || (distanceFromUserKm(userLocation, venue) ?? Infinity) <= searchRadius)
+      (!distanceFilterActive || isWithinRadiusKm(distanceFromUserKm(userLocation, venue), searchRadius))
     ).sort((a, b) => userLocation
       ? (distanceFromUserKm(userLocation, a) ?? Infinity) - (distanceFromUserKm(userLocation, b) ?? Infinity)
       : 0);
-  }, [query, searchRadius, userLocation, venues]);
+  }, [distanceFilterActive, query, searchRadius, userLocation, venues]);
   const featuredVenues = useMemo(() => {
     const names = ['Restaurante Marisco', 'Villa Bistrô', 'P22'];
     return names.map(name => filteredVenues.find(venue => venue.name === name)).filter((venue): venue is Venue => Boolean(venue));
@@ -134,6 +142,22 @@ export default function DiscoveryScreen() {
   useEffect(() => {
     setVisibleVenueCount(5);
   }, [query]);
+
+  const eventResults = (
+    <>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>{distanceFilterActive || query || filter !== 'all' || period !== 'all' ? t.results : t.upcoming}</Text>
+        <Text style={styles.count}>{visible.length}</Text>
+      </View>
+      <View style={styles.eventList}>
+        {visible.length ? visible.map(({ event, distance }) => (
+          <EventCard key={event.id} event={event} distanceKm={distance} saved={favoriteIds.includes(event.id)} onToggleSaved={() => void toggleFavorite(event)} />
+        )) : (
+          <EmptyState title={t.emptyTitle} text={distanceFilterActive && !userLocation ? t.needLocation : distanceFilterActive && searchRadius === 0 ? t.zeroDistance : t.emptyText} />
+        )}
+      </View>
+    </>
+  );
 
   return (
     <View style={styles.screen}>
@@ -198,15 +222,18 @@ export default function DiscoveryScreen() {
         <View style={styles.locationContainer}>
           <View style={styles.radiusHeader}>
             <Text style={styles.radiusLabel}>{t.radius}</Text>
-            <Text style={styles.radiusValue}>{searchRadius} km</Text>
+            <Text style={styles.radiusValue}>{distanceFilterActive ? `${searchRadius} km` : t.noDistanceLimit}</Text>
           </View>
-          <DistanceSlider value={searchRadius} onChange={setSearchRadius} label={t.radius} />
+          <DistanceSlider value={searchRadius} onChange={changeRadius} onChangeComplete={() => { if (!userLocation && !loadingLocation) void buscarLocalizacao(); }} label={t.radius} />
           <View style={styles.radiusControls}>
-            <Pressable accessibilityRole="button" accessibilityLabel={t.decreaseRadius} style={styles.radiusButton} onPress={() => setSearchRadius(current => Math.max(1, current - 5))}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t.decreaseRadius} style={styles.radiusButton} onPress={() => { changeRadius(Math.max(0, searchRadius - 5)); if (!userLocation && !loadingLocation) void buscarLocalizacao(); }}>
               <Text style={styles.radiusButtonText}>−</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel={t.increaseRadius} style={styles.radiusButton} onPress={() => setSearchRadius(current => Math.min(100, current + 5))}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t.increaseRadius} style={styles.radiusButton} onPress={() => { changeRadius(Math.min(100, searchRadius + 5)); if (!userLocation && !loadingLocation) void buscarLocalizacao(); }}>
               <Text style={styles.radiusButtonText}>+</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={() => setDistanceFilterActive(false)} style={styles.clearDistanceButton}>
+              <Text style={styles.clearDistanceText}>{t.allDistances}</Text>
             </Pressable>
           </View>
 
@@ -226,13 +253,15 @@ export default function DiscoveryScreen() {
           {userLocation && (
             <View>
               <Text style={styles.coords}>{t.locationSaved} · {userLocation.latitude.toFixed(5)}, {userLocation.longitude.toFixed(5)}</Text>
-              <Text style={styles.coords}>{t.eventsWithin} {searchRadius} km · {t.savedAt} {locationSavedAt ? new Date(locationSavedAt).toLocaleString(language === 'pt' ? 'pt-BR' : 'en-US') : t.thisDevice}</Text>
+              <Text style={styles.coords}>{distanceFilterActive ? `${t.eventsWithin} ${searchRadius} km · ` : ''}{t.savedAt} {locationSavedAt ? new Date(locationSavedAt).toLocaleString(language === 'pt' ? 'pt-BR' : 'en-US') : t.thisDevice}</Text>
             </View>
           )}
-          {!userLocation ? <Text style={styles.locationHint}>{t.enableLocation}</Text> : null}
+          {!userLocation ? <Text style={styles.locationHint}>{distanceFilterActive ? t.needLocation : t.enableLocation}</Text> : null}
         </View>
 
-        {!query && filter === 'all' && period === 'all' ? (
+        {distanceFilterActive ? eventResults : null}
+
+        {!distanceFilterActive && !query && filter === 'all' && period === 'all' ? (
           <>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>{t.featured}</Text>
@@ -281,7 +310,8 @@ export default function DiscoveryScreen() {
           </>
         ) : null}
 
-        <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>{t.explore}</Text></View>
+        {!distanceFilterActive ? <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>{t.explore}</Text></View> : null}
+        {!distanceFilterActive ? (
         <View style={styles.eventList}>
           {filteredVenues.slice(0, visibleVenueCount).map(venue => (
             <Pressable key={venue.id} style={styles.venueCard} accessibilityRole="button"
@@ -308,25 +338,9 @@ export default function DiscoveryScreen() {
             </Pressable>
           ) : null}
         </View>
-        <CommunityFeed />
-
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{query || filter !== 'all' || period !== 'all' ? t.results : t.upcoming}</Text>
-          <Text style={styles.count}>{visible.length}</Text>
-        </View>
-        <View style={styles.eventList}>
-          {visible.length ? visible.map(({ event, distance }) => (
-            <EventCard
-              key={event.id}
-              event={event}
-              distanceKm={distance}
-              saved={favoriteIds.includes(event.id)}
-              onToggleSaved={() => void toggleFavorite(event)}
-            />
-          )) : (
-            <EmptyState title={t.emptyTitle} text={t.emptyText} />
-          )}
-        </View>
+        ) : null}
+        {!distanceFilterActive ? <CommunityFeed /> : null}
+        {!distanceFilterActive ? eventResults : null}
       </ScrollView>
     </View>
   );
@@ -353,6 +367,9 @@ const copy = {
     radius: 'Distância máxima dos eventos', decreaseRadius: 'Diminuir raio em 5 quilômetros', increaseRadius: 'Aumentar raio em 5 quilômetros',
     locationSaved: 'Localização salva', eventsWithin: 'Eventos em até', savedAt: 'salvo em', thisDevice: 'este aparelho',
     enableLocation: 'Ative o GPS para filtrar por distância e ver os quilômetros de cada evento.',
+    needLocation: 'Autorize o GPS para calcular a distância. Sem localização, nenhum evento pode ser confirmado dentro do raio.',
+    zeroDistance: 'Nenhum evento está exatamente na sua localização. Aumente a distância para ver os próximos.',
+    noDistanceLimit: 'Sem limite', allDistances: 'Todas as distâncias',
     filters: { all: 'Tudo', free: 'Grátis', live: 'Ao vivo', beach: 'Praia' },
     when: 'Quando', periods: { all: 'Todos', today: 'Hoje', week: 'Próximos 7 dias' },
   },
@@ -376,6 +393,9 @@ const copy = {
     radius: 'Maximum event distance', decreaseRadius: 'Decrease radius by 5 kilometers', increaseRadius: 'Increase radius by 5 kilometers',
     locationSaved: 'Location saved', eventsWithin: 'Events within', savedAt: 'saved at', thisDevice: 'this device',
     enableLocation: 'Enable GPS to filter by distance and see how far each event is.',
+    needLocation: 'Allow GPS to calculate distance. Without your location, no event can be confirmed within the radius.',
+    zeroDistance: 'No event is exactly at your location. Increase the radius to see nearby events.',
+    noDistanceLimit: 'No limit', allDistances: 'All distances',
     filters: { all: 'All', free: 'Free', live: 'Live', beach: 'Beach' },
     when: 'When', periods: { all: 'All', today: 'Today', week: 'Next 7 days' },
   },
@@ -474,8 +494,10 @@ const styles = StyleSheet.create({
   radiusHeader: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginBottom: 5 },
   radiusLabel: { color: colors.text, fontSize: 14, fontWeight: '600' },
   radiusValue: { color: colors.accent, fontSize: 14, fontWeight: '900' },
-  radiusControls: { flexDirection: 'row', gap: 12, marginBottom: 10 },
+  radiusControls: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
   locationProgress: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   radiusButton: { width: 44, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   radiusButtonText: { color: colors.accent, fontSize: 24, fontWeight: '800' },
+  clearDistanceButton: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 10 },
+  clearDistanceText: { color: colors.muted, fontSize: 12, fontWeight: '800' },
 });

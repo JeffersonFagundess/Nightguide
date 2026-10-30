@@ -94,15 +94,15 @@ Pix:
 - abrir modal
 - copiar codigo
 - ver mensagem de copiado
-- confirmar simulacao
-- ver ingresso gerado
+- consultar status; com `pending`, nao deve haver ingresso pago
+- somente com `approved`, ver ingresso gerado
 
 Checkout Pro:
 
 - abrir Mercado Pago
-- logar comprador de teste
-- finalizar
-- voltar para app
+- usar comprador de teste diferente do vendedor e cartao oficial (`APRO`, validade `11/30`, CPF `12345678909`)
+- finalizar, voltar para app e tocar em **Verificar pagamento**
+- confirmar que `approved` gera ingresso uma unica vez; `pending`, `rejected` ou nenhum pagamento nao geram ingresso
 - verificar webhook no painel
 
 ## Teste de SQL injection

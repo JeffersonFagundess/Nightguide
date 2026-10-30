@@ -20,10 +20,6 @@ import type { FeaturedEvent } from "@/lib/types";
 type Props = {
   event: FeaturedEvent;
   buyerEmail: string;
-  initialPayment?: {
-    id?: string;
-    status?: string;
-  };
 };
 
 type CheckoutMethod = "card" | "pix";
@@ -35,7 +31,6 @@ type TestCard = {
   cvv: string;
   expiry: string;
   paymentMethodId: string;
-  issuerId: number;
   color: string;
 };
 
@@ -56,11 +51,10 @@ const testCards: TestCard[] = [
   {
     id: "master",
     brand: "Mastercard",
-    number: "5031 4332 1540 6351",
+    number: "5480 8328 0103 3311",
     cvv: "123",
     expiry: "11/30",
     paymentMethodId: "master",
-    issuerId: 24,
     color: "from-[#16171d] to-[#515a68]",
   },
   {
@@ -70,7 +64,6 @@ const testCards: TestCard[] = [
     cvv: "123",
     expiry: "11/30",
     paymentMethodId: "visa",
-    issuerId: 25,
     color: "from-[#10203b] to-[#355fb8]",
   },
   {
@@ -80,7 +73,6 @@ const testCards: TestCard[] = [
     cvv: "1234",
     expiry: "11/30",
     paymentMethodId: "amex",
-    issuerId: 18,
     color: "from-[#123333] to-[#2f8a8a]",
   },
   {
@@ -90,14 +82,13 @@ const testCards: TestCard[] = [
     cvv: "123",
     expiry: "11/30",
     paymentMethodId: "debelo",
-    issuerId: 687,
     color: "from-[#2b160d] to-[#a74824]",
   },
 ];
 
 const statusPresets = ["APRO", "OTHE", "CONT", "CALL", "FUND", "SECU", "EXPI", "FORM"];
 
-export function FakeCheckout({ event, buyerEmail, initialPayment }: Props) {
+export function FakeCheckout({ event, buyerEmail }: Props) {
   const { language } = usePreferences();
   const labels = checkoutCopy[language];
   const [quantity, setQuantity] = useState(1);
@@ -113,7 +104,6 @@ export function FakeCheckout({ event, buyerEmail, initialPayment }: Props) {
   const [pixCopied, setPixCopied] = useState(false);
   const [pixPayment, setPixPayment] = useState<MercadoPagoPayment | null>(null);
   const [checkingPix, setCheckingPix] = useState(false);
-  const [confirmingPix, setConfirmingPix] = useState(false);
   const [ticketKey, setTicketKey] = useState(scopedStorageKey(ticketsStorageBaseKey, "guest"));
   const [ready, setReady] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -207,44 +197,6 @@ export function FakeCheckout({ event, buyerEmail, initialPayment }: Props) {
     };
   }, []);
 
-  useEffect(() => {
-    if (!ready || ticket || !initialPayment?.status) return;
-
-    queueMicrotask(() => {
-      const status = initialPayment.status?.toLowerCase();
-
-      if (status === "approved" || status === "success") {
-        void issueTicket({
-          paymentMethod: "card",
-          paymentLabel: `${labels.mercadoPagoCheckout} #${initialPayment.id || "checkout"}`,
-          provider: "mercadopago",
-          providerPaymentId: initialPayment.id || `checkout-${event.id}`,
-          providerStatus: status,
-        });
-        return;
-      }
-
-      if (status === "pending") {
-        setError(labels.pendingPayment);
-        return;
-      }
-
-      if (status === "rejected" || status === "failure") {
-        setError(labels.rejectedPayment);
-      }
-    });
-  }, [
-    event.id,
-    initialPayment?.id,
-    initialPayment?.status,
-    issueTicket,
-    labels.mercadoPagoCheckout,
-    labels.pendingPayment,
-    labels.rejectedPayment,
-    ready,
-    ticket,
-  ]);
-
   function changeQuantity(nextQuantity: number) {
     setQuantity(Math.min(6, Math.max(1, nextQuantity)));
     setPixPayment(null);
@@ -330,7 +282,6 @@ export function FakeCheckout({ event, buyerEmail, initialPayment }: Props) {
           quantity,
           token: tokenData.token,
           paymentMethodId: selectedCard.paymentMethodId,
-          issuerId: selectedCard.issuerId,
           installments: 1,
           payerEmail,
           identificationType: "CPF",
@@ -445,22 +396,6 @@ export function FakeCheckout({ event, buyerEmail, initialPayment }: Props) {
     } finally {
       setCheckingPix(false);
     }
-  }
-
-  async function confirmPixDemo() {
-    if (!pixPayment) return;
-
-    setConfirmingPix(true);
-    setError("");
-    window.setTimeout(() => {
-      void issueTicket({
-        paymentMethod: "pix",
-        paymentLabel: `${labels.mercadoPagoPixDemo} #${pixPayment.id}`,
-        provider: "mercadopago",
-        providerPaymentId: pixPayment.id,
-        providerStatus: `${pixPayment.status}_demo_confirmed`,
-      }).finally(() => setConfirmingPix(false));
-    }, 850);
   }
 
   async function copyPix() {
@@ -697,11 +632,9 @@ export function FakeCheckout({ event, buyerEmail, initialPayment }: Props) {
           total={total}
           pixCopied={pixCopied}
           checking={checkingPix}
-          confirming={confirmingPix}
           onClose={() => setPixModalOpen(false)}
           onCopy={copyPix}
           onCheck={checkPixStatus}
-          onConfirmDemo={confirmPixDemo}
         />
       ) : null}
 
@@ -715,25 +648,20 @@ function PixModal({
   total,
   pixCopied,
   checking,
-  confirming,
   onClose,
   onCopy,
   onCheck,
-  onConfirmDemo,
 }: {
   labels: Record<string, string>;
   payment: MercadoPagoPayment;
   total: number;
   pixCopied: boolean;
   checking: boolean;
-  confirming: boolean;
   onClose: () => void;
   onCopy: () => void;
   onCheck: () => void;
-  onConfirmDemo: () => void;
 }) {
   const [qrDataUrl, setQrDataUrl] = useState("");
-  const isSimulated = isSimulatedPixPayment(payment);
   const qrImageSrc = payment.qrCodeBase64 ? `data:image/png;base64,${payment.qrCodeBase64}` : payment.qrCode ? qrDataUrl : "";
 
   useEffect(() => {
@@ -800,7 +728,7 @@ function PixModal({
         <div className="mt-4 grid gap-2 rounded-[8px] border border-white/10 bg-white/[0.04] p-3 sm:grid-cols-3">
           <PixStatusItem label={labels.pixStepOne} value={labels.pixStepOneText} active />
           <PixStatusItem label={labels.pixStepTwo} value={labels.pixStepTwoText} active={pixCopied} />
-          <PixStatusItem label={labels.pixStepThree} value={labels.pixStepThreeText} active={confirming} />
+          <PixStatusItem label={labels.pixStepThree} value={labels.pixStepThreeText} active={payment.status === "approved"} />
         </div>
 
         <div className="mt-3 rounded-[8px] border border-white/10 bg-white p-3 text-[#15100e]">
@@ -835,7 +763,7 @@ function PixModal({
                 <p className="mt-1 font-mono text-xs font-bold">{payment.id}</p>
               </div>
               <span className="rounded-full bg-[#15100e] px-2 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-white">
-                {isSimulated ? labels.pixSimulatedBadge : labels.pixMpBadge}
+                {labels.pixMpBadge}
               </span>
             </div>
           </div>
@@ -880,23 +808,13 @@ function PixModal({
         </p>
 
         <div className="grid gap-2">
-          {!isSimulated ? (
-            <button
-              onClick={onCheck}
-              disabled={checking || confirming}
-              className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-[6px] border border-white/10 px-4 text-sm font-semibold text-[color:var(--foreground)] disabled:opacity-60"
-            >
-              <QrCode size={16} aria-hidden />
-              {checking ? labels.checkingPix : labels.checkPix}
-            </button>
-          ) : null}
           <button
-            onClick={onConfirmDemo}
-            disabled={confirming}
+            onClick={onCheck}
+            disabled={checking}
             className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[6px] bg-[color:var(--accent)] px-4 font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--accent-strong)] disabled:opacity-70"
           >
-            <CheckCircle2 size={18} aria-hidden />
-            {confirming ? labels.pixConfirming : labels.pixConfirmButton}
+            <QrCode size={18} aria-hidden />
+            {checking ? labels.checkingPix : labels.checkPix}
           </button>
         </div>
       </div>
@@ -914,10 +832,6 @@ function PixStatusItem({ label, value, active }: { label: string; value: string;
       <p className="mt-1 text-xs leading-4 text-[color:var(--muted)]">{value}</p>
     </div>
   );
-}
-
-function isSimulatedPixPayment(payment: MercadoPagoPayment) {
-  return payment.id.startsWith("PIX-") || payment.id.startsWith("900");
 }
 
 function SuccessOverlay({

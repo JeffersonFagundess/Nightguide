@@ -90,7 +90,7 @@ Para parceiros:
 ### Pagamento
 
 - cartao teste via Mercado Pago
-- Pix visual/simulado quando a sandbox limita o fluxo
+- Pix com QR da API do Mercado Pago; ingresso liberado apenas com status aprovado
 - Checkout Pro externo
 - webhook para eventos Mercado Pago
 

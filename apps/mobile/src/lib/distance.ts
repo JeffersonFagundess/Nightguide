@@ -20,6 +20,10 @@ export function distanceFromUserKm(user: Coordinates | null, target: Partial<Coo
   return hasValidCoordinates(user) && hasValidCoordinates(target) ? distanceKm(user, target) : null;
 }
 
+export function isWithinRadiusKm(distance: number | null, radius: number): boolean {
+  return distance !== null && Number.isFinite(distance) && Number.isFinite(radius) && radius >= 0 && distance <= radius;
+}
+
 export function formatDistance(distance: number, language: 'pt' | 'en'): string {
   if (distance < 1) return `${Math.round(distance * 1000)} m`;
   return `${distance.toLocaleString(language === 'pt' ? 'pt-BR' : 'en-US', { maximumFractionDigits: 1 })} km`;

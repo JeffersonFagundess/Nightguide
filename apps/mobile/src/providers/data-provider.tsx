@@ -60,12 +60,12 @@ export function DataProvider({ children }: PropsWithChildren) {
       const nextEvents = (eventsResult.data || []).map(mapEvent).filter((event): event is NightEvent => Boolean(event));
       const nextVenues = (venuesResult.data || []).map(mapVenue).filter((venue): venue is Venue => Boolean(venue));
       const data = {
-        events: nextEvents.length || nextVenues.length ? nextEvents : fallbackEvents,
-        venues: nextEvents.length || nextVenues.length ? nextVenues : localVenues,
+        events: nextEvents,
+        venues: nextVenues,
       };
       setEvents(data.events);
       setVenues(data.venues);
-      setSource(nextEvents.length || nextVenues.length ? 'supabase' : 'demo');
+      setSource('supabase');
       await AsyncStorage.setItem(cacheKey, JSON.stringify(data));
     } catch {
       const cached = await AsyncStorage.getItem(cacheKey);
@@ -108,10 +108,11 @@ function mapEvent(row: Record<string, unknown>): NightEvent | null {
   const venueRelation = Array.isArray(row.venues) ? row.venues[0] : row.venues;
   const venue = (venueRelation || {}) as Record<string, unknown>;
   const verifiedVenue = realVenues.find(item => item.name === venue.name);
-  const coordinates = verifiedVenue || {
+  const databaseCoordinates = {
     latitude: venue.latitude == null ? NaN : Number(venue.latitude),
     longitude: venue.longitude == null ? NaN : Number(venue.longitude),
   };
+  const coordinates = hasValidCoordinates(databaseCoordinates) ? databaseCoordinates : verifiedVenue;
   const startsAt = new Date(String(row.starts_at));
   const price = Number(row.price || 0);
 
@@ -124,7 +125,7 @@ function mapEvent(row: Record<string, unknown>): NightEvent | null {
     time: startsAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
     startsAt: startsAt.toISOString(),
     genre: String(row.genre || 'Evento'),
-    price: price > 0 ? `R$ ${price.toFixed(0)}` : 'Grátis',
+    price: price > 0 ? `R$ ${price.toFixed(2)}` : 'Grátis',
     image: String(row.cover_url || fallbackEvents[0].image),
     highlight: String(row.description || 'Evento em destaque no NightGuide.'),
     mood: String(row.mood || row.genre || 'Ao vivo'),
@@ -137,7 +138,8 @@ function mapVenue(row: Record<string, unknown>): Venue | null {
   if (!row.id || !row.name || row.latitude == null || row.longitude == null) return null;
   const name = String(row.name);
   const verifiedVenue = realVenues.find(venue => venue.name === name);
-  const coordinates = verifiedVenue || { latitude: Number(row.latitude), longitude: Number(row.longitude) };
+  const databaseCoordinates = { latitude: Number(row.latitude), longitude: Number(row.longitude) };
+  const coordinates = hasValidCoordinates(databaseCoordinates) ? databaseCoordinates : verifiedVenue;
   if (!hasValidCoordinates(coordinates)) return null;
   const photo = venuePhoto(name, String(row.category || 'Restaurante'));
   const uploadedCover = !verifiedVenue && typeof row.cover_url === 'string' && row.cover_url.trim() ? row.cover_url : undefined;

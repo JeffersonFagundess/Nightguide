@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     }
 
     const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://nightguide-modern.vercel.app").replace(/\/$/, "");
-    const ticketUrl = `${siteUrl}/ingressos/${event.id}`;
+    const returnUrl = `${siteUrl}/pagamento/retorno?eventId=${encodeURIComponent(event.id)}`;
     console.info("[NightGuide][MercadoPago][preference:start]", {
       debugId,
       eventId: event.id,
@@ -66,11 +66,11 @@ export async function POST(request: Request) {
             currency_id: "BRL",
           },
         ],
-        external_reference: `nightguide:${event.id}:${Date.now()}`,
+        external_reference: `nightguide:${event.id}:${crypto.randomUUID()}`,
         back_urls: {
-          success: `${ticketUrl}?mp_status=approved`,
-          failure: `${ticketUrl}?mp_status=rejected`,
-          pending: `${ticketUrl}?mp_status=pending`,
+          success: `${returnUrl}&mp_status=approved`,
+          failure: `${returnUrl}&mp_status=rejected`,
+          pending: `${returnUrl}&mp_status=pending`,
         },
         auto_return: "approved",
         notification_url: `${siteUrl}/api/mercadopago/webhook`,

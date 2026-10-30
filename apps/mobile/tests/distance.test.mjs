@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { distanceFromUserKm, distanceKm, formatDistance, hasValidCoordinates } from '../src/lib/distance.ts';
+import { distanceFromUserKm, distanceKm, formatDistance, hasValidCoordinates, isWithinRadiusKm } from '../src/lib/distance.ts';
 
 test('calcula a distância geográfica para filtrar pelo raio', () => {
   const user = { latitude: -22.9344, longitude: -42.4968 };
@@ -26,4 +26,15 @@ test('mostra metros para eventos próximos e quilômetros para distâncias maior
   assert.equal(formatDistance(0.65, 'pt'), '650 m');
   assert.equal(formatDistance(1.85, 'pt'), '1,9 km');
   assert.equal(formatDistance(1.85, 'en'), '1.9 km');
+});
+
+test('o raio zero só inclui eventos na posição exata e a contagem fica zerada sem correspondência', () => {
+  const user = { latitude: -22.9344, longitude: -42.4968 };
+  const events = [user, { latitude: -22.9296, longitude: -42.5103 }, { latitude: -22.9344, longitude: -43.4968 }];
+  const count = (radius) => events.filter(event => isWithinRadiusKm(distanceFromUserKm(user, event), radius)).length;
+  assert.equal(count(0), 1);
+  assert.equal(count(2), 2);
+  assert.equal(count(110), 3);
+  assert.equal(isWithinRadiusKm(null, 100), false);
+  assert.equal(isWithinRadiusKm(distanceFromUserKm(user, events[1]), 0), false);
 });
