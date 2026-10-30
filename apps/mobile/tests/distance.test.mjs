@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { distanceFromUserKm, distanceKm, formatDistance, hasValidCoordinates, isWithinRadiusKm } from '../src/lib/distance.ts';
+import { demoDistanceOrigin, distanceFromUserKm, distanceKm, eventDistanceKm, formatDistance, hasValidCoordinates, isWithinRadiusKm } from '../src/lib/distance.ts';
 
 test('calcula a distância geográfica para filtrar pelo raio', () => {
   const user = { latitude: -22.9344, longitude: -42.4968 };
@@ -37,4 +37,15 @@ test('o raio zero só inclui eventos na posição exata e a contagem fica zerada
   assert.equal(count(110), 3);
   assert.equal(isWithinRadiusKm(null, 100), false);
   assert.equal(isWithinRadiusKm(distanceFromUserKm(user, events[1]), 0), false);
+});
+
+test('distâncias de demonstração variam para eventos e locais ao ampliar o raio', () => {
+  const demoEvent = { latitude: -22.9296, longitude: -42.5103 };
+  const demoVenue = { latitude: -22.9341153, longitude: -42.4944856 };
+  const distances = [demoEvent, demoVenue].map(item => distanceFromUserKm(demoDistanceOrigin, item));
+  assert.equal(distances.filter(distance => isWithinRadiusKm(distance, 0)).length, 0);
+  assert.equal(distances.filter(distance => isWithinRadiusKm(distance, 2)).length, 2);
+  const distantUser = { latitude: -23.55, longitude: -46.63 };
+  assert.equal(eventDistanceKm(distantUser, demoEvent, true), eventDistanceKm(null, demoEvent, true));
+  assert.ok(eventDistanceKm(distantUser, demoEvent, false) > 100);
 });

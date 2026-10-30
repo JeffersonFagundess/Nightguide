@@ -1,5 +1,7 @@
 export type Coordinates = { latitude: number; longitude: number };
 export const savedLocationKey = 'nightguide:discovery-location:v1';
+// Ponto de referência fictício usado até o usuário escolher GPS real.
+export const demoDistanceOrigin: Coordinates = { latitude: -22.9317, longitude: -42.5041 };
 
 export function hasValidCoordinates(value: Partial<Coordinates> | null | undefined): value is Coordinates {
   return value != null &&
@@ -18,6 +20,10 @@ export function distanceKm(from: Coordinates, to: Coordinates): number {
 
 export function distanceFromUserKm(user: Coordinates | null, target: Partial<Coordinates>): number | null {
   return hasValidCoordinates(user) && hasValidCoordinates(target) ? distanceKm(user, target) : null;
+}
+
+export function eventDistanceKm(origin: Coordinates | null, event: Partial<Coordinates>, demo: boolean): number | null {
+  return distanceFromUserKm(demo ? demoDistanceOrigin : origin, event);
 }
 
 export function isWithinRadiusKm(distance: number | null, radius: number): boolean {

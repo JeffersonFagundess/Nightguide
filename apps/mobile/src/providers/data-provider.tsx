@@ -7,9 +7,11 @@ import { venuePhoto } from '@/src/data/venue-photos';
 const localVenues = realVenues.map(venue => ({ ...venue, ...venuePhoto(venue.name, venue.category) }));
 import { supabase } from '@/src/lib/supabase';
 import { hasValidCoordinates } from '@/src/lib/distance';
+import { chooseDiscoveryEvents } from '@/src/lib/discovery-events';
 import type { NightEvent, Venue } from '@/src/types';
 
 const cacheKey = 'nightguide:home-cache:v5';
+const demoEventIds = new Set(fallbackEvents.map(event => event.id));
 
 type HomeCache = { events: NightEvent[]; venues: Venue[] };
 type DataContextValue = HomeCache & {
@@ -59,21 +61,24 @@ export function DataProvider({ children }: PropsWithChildren) {
 
       const nextEvents = (eventsResult.data || []).map(mapEvent).filter((event): event is NightEvent => Boolean(event));
       const nextVenues = (venuesResult.data || []).map(mapVenue).filter((venue): venue is Venue => Boolean(venue));
+      const selected = chooseDiscoveryEvents(nextEvents, fallbackEvents);
       const data = {
-        events: nextEvents,
-        venues: nextVenues,
+        events: selected.events,
+        venues: nextVenues.length ? nextVenues : localVenues,
       };
       setEvents(data.events);
       setVenues(data.venues);
-      setSource('supabase');
+      setSource(selected.demoMode ? 'demo' : 'supabase');
       await AsyncStorage.setItem(cacheKey, JSON.stringify(data));
     } catch {
       const cached = await AsyncStorage.getItem(cacheKey);
       if (cached) {
         const data = JSON.parse(cached) as HomeCache;
-        setEvents(data.events);
-        setVenues(data.venues);
-        setSource('cache');
+        const cachedPublished = (data.events || []).filter(event => !demoEventIds.has(event.id));
+        const selected = chooseDiscoveryEvents(cachedPublished, fallbackEvents);
+        setEvents(selected.events);
+        setVenues(data.venues?.length ? data.venues : localVenues);
+        setSource(selected.demoMode ? 'demo' : 'cache');
       } else {
         setEvents(fallbackEvents);
         setVenues(localVenues);

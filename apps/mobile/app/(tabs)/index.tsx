@@ -16,13 +16,15 @@ import { useNightData } from '@/src/providers/data-provider';
 import { usePreferences } from '@/src/providers/preferences-provider';
 import { useUserData } from '@/src/providers/user-data-provider';
 import { colors } from '@/src/theme';
-import type { NightEvent, Venue } from '@/src/types';
+import type { NightEvent } from '@/src/types';
 import { localizeVenueCategory } from '@/src/lib/i18n';
-import { distanceFromUserKm, formatDistance, hasValidCoordinates, isWithinRadiusKm, savedLocationKey, type Coordinates } from '@/src/lib/distance';
+import { demoDistanceOrigin, distanceFromUserKm, eventDistanceKm, formatDistance, hasValidCoordinates, isWithinRadiusKm, savedLocationKey, type Coordinates } from '@/src/lib/distance';
 import { isEventInPeriod, type EventPeriod } from '@/src/lib/event-period';
+import { fallbackEvents } from '@/src/data/fallback';
 
 const filters = ['all', 'free', 'live', 'beach'] as const;
 const periods: EventPeriod[] = ['all', 'today', 'week'];
+const demoEventIds = new Set(fallbackEvents.map(event => event.id));
 type Filter = (typeof filters)[number];
 
 export default function DiscoveryScreen() {
@@ -40,11 +42,15 @@ export default function DiscoveryScreen() {
   const [locationSavedAt, setLocationSavedAt] = useState<string | null>(null);
   const [searchRadius, setSearchRadius] = useState(10); // Raio inicial de 10km
   const [distanceFilterActive, setDistanceFilterActive] = useState(false);
+  const [distancePanelOpen, setDistancePanelOpen] = useState(false);
+  const [useRealLocation, setUseRealLocation] = useState(false);
 
   const { language } = usePreferences();
   const { width: windowWidth } = useWindowDimensions();
   const t = copy[language];
   const featuredCardWidth = Math.max(280, windowWidth - 36);
+  const demoDistanceActive = !useRealLocation;
+  const distanceOrigin = demoDistanceActive ? demoDistanceOrigin : userLocation;
 
   useEffect(() => {
     let active = true;
@@ -53,7 +59,6 @@ export default function DiscoveryScreen() {
       const saved = JSON.parse(raw) as Coordinates & { savedAt: string };
       if (hasValidCoordinates(saved)) {
         setUserLocation({ latitude: saved.latitude, longitude: saved.longitude });
-        setDistanceFilterActive(true);
         if (Number.isFinite(new Date(saved.savedAt).getTime())) setLocationSavedAt(saved.savedAt);
       }
     }).catch(() => {
@@ -90,6 +95,7 @@ export default function DiscoveryScreen() {
       await AsyncStorage.setItem(savedLocationKey, JSON.stringify({ latitude, longitude, savedAt }));
       if (requestId !== locationRequestId.current) return;
       setUserLocation({ latitude, longitude });
+      setUseRealLocation(true);
       setLocationSavedAt(savedAt);
       Alert.alert('Localização salva', 'As coordenadas foram salvas neste aparelho e associadas à busca de eventos próximos.');
 
@@ -119,25 +125,25 @@ export default function DiscoveryScreen() {
     return events.flatMap((event) => {
       const searchable = normalize(`${event.title} ${event.venue} ${event.genre} ${event.highlight} ${event.mood}`);
       if ((term && !searchable.includes(term)) || !matchesFilter(event, filter) || !isEventInPeriod(event.startsAt, period, now)) return [];
-      const distance = distanceFromUserKm(userLocation, event);
+      const distance = eventDistanceKm(distanceOrigin, event, demoEventIds.has(event.id));
       if (distanceFilterActive && !isWithinRadiusKm(distance, searchRadius)) return [];
       return [{ event, distance }];
-    }).sort((a, b) => userLocation ? (a.distance ?? Infinity) - (b.distance ?? Infinity) : 0);
-  }, [distanceFilterActive, events, filter, now, period, query, searchRadius, userLocation]);
+    }).sort((a, b) => distanceOrigin ? (a.distance ?? Infinity) - (b.distance ?? Infinity) : 0);
+  }, [distanceFilterActive, distanceOrigin, events, filter, now, period, query, searchRadius]);
 
   const filteredVenues = useMemo(() => {
     const term = normalize(query);
     return venues.filter(venue =>
       (!term || normalize(`${venue.name} ${venue.category} ${venue.address}`).includes(term)) &&
-      (!distanceFilterActive || isWithinRadiusKm(distanceFromUserKm(userLocation, venue), searchRadius))
-    ).sort((a, b) => userLocation
-      ? (distanceFromUserKm(userLocation, a) ?? Infinity) - (distanceFromUserKm(userLocation, b) ?? Infinity)
+      (!distanceFilterActive || isWithinRadiusKm(distanceFromUserKm(distanceOrigin, venue), searchRadius))
+    ).sort((a, b) => distanceOrigin
+      ? (distanceFromUserKm(distanceOrigin, a) ?? Infinity) - (distanceFromUserKm(distanceOrigin, b) ?? Infinity)
       : 0);
-  }, [distanceFilterActive, query, searchRadius, userLocation, venues]);
-  const featuredVenues = useMemo(() => {
-    const names = ['Restaurante Marisco', 'Villa Bistrô', 'P22'];
-    return names.map(name => filteredVenues.find(venue => venue.name === name)).filter((venue): venue is Venue => Boolean(venue));
-  }, [filteredVenues]);
+  }, [distanceFilterActive, distanceOrigin, query, searchRadius, venues]);
+  const carouselEvents = [
+    ...visible.filter(({ event }) => demoEventIds.has(event.id)),
+    ...visible.filter(({ event }) => !demoEventIds.has(event.id)),
+  ].slice(0, 4);
 
   useEffect(() => {
     setVisibleVenueCount(5);
@@ -151,9 +157,9 @@ export default function DiscoveryScreen() {
       </View>
       <View style={styles.eventList}>
         {visible.length ? visible.map(({ event, distance }) => (
-          <EventCard key={event.id} event={event} distanceKm={distance} saved={favoriteIds.includes(event.id)} onToggleSaved={() => void toggleFavorite(event)} />
+          <EventCard key={event.id} event={event} distanceKm={distance} demo={demoEventIds.has(event.id)} saved={favoriteIds.includes(event.id)} onToggleSaved={() => void toggleFavorite(event)} />
         )) : (
-          <EmptyState title={t.emptyTitle} text={distanceFilterActive && !userLocation ? t.needLocation : distanceFilterActive && searchRadius === 0 ? t.zeroDistance : t.emptyText} />
+          <EmptyState title={t.emptyTitle} text={distanceFilterActive && !distanceOrigin ? t.needLocation : distanceFilterActive && searchRadius === 0 ? t.zeroDistance : t.emptyText} />
         )}
       </View>
     </>
@@ -219,53 +225,11 @@ export default function DiscoveryScreen() {
           </ScrollView>
         </View>
 
-        <View style={styles.locationContainer}>
-          <View style={styles.radiusHeader}>
-            <Text style={styles.radiusLabel}>{t.radius}</Text>
-            <Text style={styles.radiusValue}>{distanceFilterActive ? `${searchRadius} km` : t.noDistanceLimit}</Text>
-          </View>
-          <DistanceSlider value={searchRadius} onChange={changeRadius} onChangeComplete={() => { if (!userLocation && !loadingLocation) void buscarLocalizacao(); }} label={t.radius} />
-          <View style={styles.radiusControls}>
-            <Pressable accessibilityRole="button" accessibilityLabel={t.decreaseRadius} style={styles.radiusButton} onPress={() => { changeRadius(Math.max(0, searchRadius - 5)); if (!userLocation && !loadingLocation) void buscarLocalizacao(); }}>
-              <Text style={styles.radiusButtonText}>−</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel={t.increaseRadius} style={styles.radiusButton} onPress={() => { changeRadius(Math.min(100, searchRadius + 5)); if (!userLocation && !loadingLocation) void buscarLocalizacao(); }}>
-              <Text style={styles.radiusButtonText}>+</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" onPress={() => setDistanceFilterActive(false)} style={styles.clearDistanceButton}>
-              <Text style={styles.clearDistanceText}>{t.allDistances}</Text>
-            </Pressable>
-          </View>
-
-          {loadingLocation ? (
-            <View style={styles.locationProgress}>
-              <ActivityIndicator size="small" color={colors.accent} />
-              <Pressable accessibilityRole="button" onPress={cancelarLocalizacao} style={styles.radiusButton}>
-                <Text style={styles.coords}>Cancelar</Text>
-              </Pressable>
-            </View>
-          ) : (
-            <Pressable style={styles.locationButton} onPress={buscarLocalizacao}>
-              <MapPin size={20} color={colors.ink} />
-              <Text style={styles.locationButtonText}>{userLocation ? 'Atualizar localização (GPS)' : 'Eventos perto de mim (GPS)'}</Text>
-            </Pressable>
-          )}
-          {userLocation && (
-            <View>
-              <Text style={styles.coords}>{t.locationSaved} · {userLocation.latitude.toFixed(5)}, {userLocation.longitude.toFixed(5)}</Text>
-              <Text style={styles.coords}>{distanceFilterActive ? `${t.eventsWithin} ${searchRadius} km · ` : ''}{t.savedAt} {locationSavedAt ? new Date(locationSavedAt).toLocaleString(language === 'pt' ? 'pt-BR' : 'en-US') : t.thisDevice}</Text>
-            </View>
-          )}
-          {!userLocation ? <Text style={styles.locationHint}>{distanceFilterActive ? t.needLocation : t.enableLocation}</Text> : null}
-        </View>
-
-        {distanceFilterActive ? eventResults : null}
-
-        {!distanceFilterActive && !query && filter === 'all' && period === 'all' ? (
+        {!query && filter === 'all' && period === 'all' && visible.length > 0 ? (
           <>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>{t.featured}</Text>
-              <Text style={styles.source}>{source === 'supabase' ? 'AO VIVO' : source === 'cache' ? 'OFFLINE' : 'DEMO'}</Text>
+              <Text style={styles.source}>{source === 'supabase' ? 'AO VIVO + DEMO' : source === 'cache' ? 'OFFLINE + DEMO' : 'DEMO'}</Text>
             </View>
             <ScrollView
               horizontal
@@ -274,32 +238,12 @@ export default function DiscoveryScreen() {
               snapToInterval={featuredCardWidth + 18}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.featuredList}>
-              {visible.slice(0, 2).map(({ event, distance }) => (
+              {carouselEvents.map(({ event, distance }) => (
                 <EventCard
                   key={event.id}
                   event={event}
                   distanceKm={distance}
-                  featured
-                  featuredWidth={featuredCardWidth}
-                  saved={favoriteIds.includes(event.id)}
-                  onToggleSaved={() => void toggleFavorite(event)}
-                />
-              ))}
-              {featuredVenues.map(venue => (
-                <FeaturedVenueCard
-                  key={`featured-${venue.id}`}
-                  venue={venue}
-                  width={featuredCardWidth}
-                  label={t.venueSpotlight}
-                  cta={t.openVenue}
-                  category={localizeVenueCategory(venue.category, language)}
-                />
-              ))}
-              {visible.slice(2, 4).map(({ event, distance }) => (
-                <EventCard
-                  key={event.id}
-                  event={event}
-                  distanceKm={distance}
+                  demo={demoEventIds.has(event.id)}
                   featured
                   featuredWidth={featuredCardWidth}
                   saved={favoriteIds.includes(event.id)}
@@ -309,6 +253,46 @@ export default function DiscoveryScreen() {
             </ScrollView>
           </>
         ) : null}
+
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: distancePanelOpen }} onPress={() => setDistancePanelOpen(open => !open)} style={styles.distanceToggle}>
+          <MapPin size={17} color={colors.accent} />
+          <Text style={styles.distanceToggleText}>{distanceFilterActive ? `${t.filterByDistance}: ${searchRadius} km` : t.filterByDistance}</Text>
+          <Text style={styles.distanceToggleIcon}>{distancePanelOpen ? '−' : '+'}</Text>
+        </Pressable>
+        {distancePanelOpen ? (
+          <View style={styles.locationContainer}>
+            <View style={styles.radiusHeader}>
+              <Text style={styles.radiusLabel}>{t.radius}</Text>
+              <Text style={styles.radiusValue}>{distanceFilterActive ? `${searchRadius} km` : t.noDistanceLimit}</Text>
+            </View>
+            <DistanceSlider value={searchRadius} onChange={changeRadius} onChangeComplete={() => { if (!distanceOrigin && !loadingLocation) void buscarLocalizacao(); }} label={t.radius} />
+            <View style={styles.radiusControls}>
+              <Pressable accessibilityRole="button" accessibilityLabel={t.decreaseRadius} style={styles.radiusButton} onPress={() => { changeRadius(Math.max(0, searchRadius - 5)); if (!distanceOrigin && !loadingLocation) void buscarLocalizacao(); }}><Text style={styles.radiusButtonText}>−</Text></Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel={t.increaseRadius} style={styles.radiusButton} onPress={() => { changeRadius(Math.min(100, searchRadius + 5)); if (!distanceOrigin && !loadingLocation) void buscarLocalizacao(); }}><Text style={styles.radiusButtonText}>+</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={() => setDistanceFilterActive(false)} style={styles.clearDistanceButton}><Text style={styles.clearDistanceText}>{t.allDistances}</Text></Pressable>
+            </View>
+            {loadingLocation ? (
+              <View style={styles.locationProgress}>
+                <ActivityIndicator size="small" color={colors.accent} />
+                <Pressable accessibilityRole="button" onPress={cancelarLocalizacao} style={styles.radiusButton}><Text style={styles.coords}>Cancelar</Text></Pressable>
+              </View>
+            ) : (
+              <Pressable style={styles.locationButton} onPress={buscarLocalizacao}>
+                <MapPin size={20} color={colors.ink} />
+                <Text style={styles.locationButtonText}>{demoDistanceActive ? t.useRealGps : userLocation ? 'Atualizar localização (GPS)' : 'Eventos perto de mim (GPS)'}</Text>
+              </Pressable>
+            )}
+            {userLocation && !demoDistanceActive ? (
+              <View>
+                <Text style={styles.coords}>{t.locationSaved} · {userLocation.latitude.toFixed(5)}, {userLocation.longitude.toFixed(5)}</Text>
+                <Text style={styles.coords}>{distanceFilterActive ? `${t.eventsWithin} ${searchRadius} km · ` : ''}{t.savedAt} {locationSavedAt ? new Date(locationSavedAt).toLocaleString(language === 'pt' ? 'pt-BR' : 'en-US') : t.thisDevice}</Text>
+              </View>
+            ) : null}
+            {demoDistanceActive ? <Text style={styles.locationHint}>{t.demoDistanceHint}</Text> : !userLocation ? <Text style={styles.locationHint}>{distanceFilterActive ? t.needLocation : t.enableLocation}</Text> : null}
+          </View>
+        ) : null}
+
+        {eventResults}
 
         {!distanceFilterActive ? <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>{t.explore}</Text></View> : null}
         {!distanceFilterActive ? (
@@ -320,7 +304,7 @@ export default function DiscoveryScreen() {
               <View style={{ flex: 1, gap: 5 }}>
                 <Text style={styles.venueName}>{venue.name}</Text>
                 <Text style={styles.subtitleSmall}>{venue.photoIllustrative ? t.illustrative : venue.photoCredit}</Text>
-                <Text style={styles.subtitleSmall}>{localizeVenueCategory(venue.category, language)} · {venue.address}{userLocation ? ` · ${formatDistance(distanceFromUserKm(userLocation, venue)!, language)}` : ''}</Text>
+                <Text style={styles.subtitleSmall}>{localizeVenueCategory(venue.category, language)} · {venue.address}{distanceOrigin ? ` · ${formatDistance(distanceFromUserKm(distanceOrigin, venue)!, language)}` : ''}</Text>
                 <Text style={styles.source} numberOfLines={2}>{t.profile}</Text>
               </View>
             </Pressable>
@@ -340,7 +324,6 @@ export default function DiscoveryScreen() {
         </View>
         ) : null}
         {!distanceFilterActive ? <CommunityFeed /> : null}
-        {!distanceFilterActive ? eventResults : null}
       </ScrollView>
     </View>
   );
@@ -360,13 +343,14 @@ const copy = {
     explore: 'Explore Saquarema',
     illustrative: 'Imagem ilustrativa',
     profile: 'VER PERFIL →',
-    venueSpotlight: 'LOCAL EM DESTAQUE',
-    openVenue: 'ABRIR PERFIL E AVALIAÇÕES →',
     moreVenues: 'Ver mais estabelecimentos',
     onlyFiveVenues: 'Mostrar apenas 5 estabelecimentos',
     radius: 'Distância máxima dos eventos', decreaseRadius: 'Diminuir raio em 5 quilômetros', increaseRadius: 'Aumentar raio em 5 quilômetros',
+    filterByDistance: 'Filtrar por distância',
     locationSaved: 'Localização salva', eventsWithin: 'Eventos em até', savedAt: 'salvo em', thisDevice: 'este aparelho',
     enableLocation: 'Ative o GPS para filtrar por distância e ver os quilômetros de cada evento.',
+    useRealGps: 'Usar meu GPS',
+    demoDistanceHint: 'Distâncias de demonstração usam um ponto fictício em Saquarema. Meu GPS mostra a distância real dos eventos publicados e locais; eventos DEMO mantêm a distância fictícia.',
     needLocation: 'Autorize o GPS para calcular a distância. Sem localização, nenhum evento pode ser confirmado dentro do raio.',
     zeroDistance: 'Nenhum evento está exatamente na sua localização. Aumente a distância para ver os próximos.',
     noDistanceLimit: 'Sem limite', allDistances: 'Todas as distâncias',
@@ -386,13 +370,14 @@ const copy = {
     explore: 'Explore Saquarema',
     illustrative: 'Illustrative image',
     profile: 'VIEW PROFILE →',
-    venueSpotlight: 'FEATURED VENUE',
-    openVenue: 'OPEN PROFILE AND REVIEWS →',
     moreVenues: 'See more venues',
     onlyFiveVenues: 'Show only 5 venues',
     radius: 'Maximum event distance', decreaseRadius: 'Decrease radius by 5 kilometers', increaseRadius: 'Increase radius by 5 kilometers',
+    filterByDistance: 'Filter by distance',
     locationSaved: 'Location saved', eventsWithin: 'Events within', savedAt: 'saved at', thisDevice: 'this device',
     enableLocation: 'Enable GPS to filter by distance and see how far each event is.',
+    useRealGps: 'Use my GPS',
+    demoDistanceHint: 'Demo distances use a fictional point in Saquarema. My GPS shows real distances for published events and venues; DEMO events keep fictional distances.',
     needLocation: 'Allow GPS to calculate distance. Without your location, no event can be confirmed within the radius.',
     zeroDistance: 'No event is exactly at your location. Increase the radius to see nearby events.',
     noDistanceLimit: 'No limit', allDistances: 'All distances',
@@ -412,29 +397,6 @@ function matchesFilter(event: NightEvent, filter: Filter) {
   if (filter === 'beach') return text.includes('praia') || text.includes('orla') || text.includes('mar');
 
   return true;
-}
-
-function FeaturedVenueCard({ venue, width, label, cta, category }: { venue: Venue; width: number; label: string; cta: string; category: string }) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${cta} ${venue.name}`}
-      onPress={() => router.push({ pathname: '/venue/[id]', params: { id: venue.id } })}
-      style={({ pressed }) => [styles.featuredVenueCard, { width }, pressed && styles.pressed]}>
-      {venue.coverAsset || venue.coverUrl ? <Image source={venue.coverAsset || { uri: venue.coverUrl }} resizeMode="cover" style={styles.featuredVenueImage} /> : null}
-      <View style={styles.featuredVenueOverlay} />
-      <View style={styles.featuredVenueContent}>
-        <View style={styles.featuredVenueBadge}><Text style={styles.featuredVenueBadgeText}>{label}</Text></View>
-        <Text style={styles.featuredVenueTitle} numberOfLines={2}>{venue.name}</Text>
-        <View style={styles.featuredVenueLocation}>
-          <MapPin size={15} color={colors.accent} />
-          <Text style={styles.featuredVenueMeta} numberOfLines={2}>{venue.address}</Text>
-        </View>
-        <Text style={styles.featuredVenueCategory} numberOfLines={1}>{category}</Text>
-        <Text style={styles.featuredVenueCta} numberOfLines={2}>{cta}</Text>
-      </View>
-    </Pressable>
-  );
 }
 
 const styles = StyleSheet.create({
@@ -465,6 +427,9 @@ const styles = StyleSheet.create({
   periodOptionTextActive: { color: colors.ink },
 
   locationContainer: { paddingHorizontal: 18, marginBottom: 15 },
+  distanceToggle: { marginHorizontal: 18, marginTop: 14, marginBottom: 12, minHeight: 44, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 9, borderWidth: 1, borderColor: colors.border, borderRadius: 12, backgroundColor: colors.surface },
+  distanceToggleText: { flex: 1, color: colors.text, fontSize: 13, fontWeight: '800' },
+  distanceToggleIcon: { color: colors.accent, fontSize: 21, fontWeight: '800' },
   locationButton: { flexDirection: 'row', backgroundColor: colors.accent, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center', gap: 8 },
   locationButtonText: { color: colors.ink, fontWeight: '800', fontSize: 14 },
   coords: { marginTop: 10, color: colors.accent, fontWeight: '800', fontSize: 12 },
@@ -476,18 +441,6 @@ const styles = StyleSheet.create({
   count: { color: colors.muted, fontSize: 13, fontWeight: '800' },
   featuredList: { paddingLeft: 18, paddingRight: 18 },
   eventList: { paddingHorizontal: 18, gap: 14 },
-  featuredVenueCard: { minHeight: 390, marginRight: 18, overflow: 'hidden', borderRadius: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  featuredVenueImage: { position: 'absolute', inset: 0, width: '100%', height: '100%' },
-  featuredVenueOverlay: { position: 'absolute', inset: 0, backgroundColor: 'rgba(5,5,7,0.48)' },
-  featuredVenueContent: { marginTop: 'auto', padding: 18, gap: 8 },
-  featuredVenueBadge: { alignSelf: 'flex-start', backgroundColor: 'rgba(226,255,84,0.15)', borderColor: 'rgba(226,255,84,0.45)', borderWidth: 1, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
-  featuredVenueBadgeText: { color: colors.accent, fontWeight: '900', fontSize: 10, letterSpacing: 0.8 },
-  featuredVenueTitle: { color: colors.text, fontSize: 31, lineHeight: 34, fontWeight: '900', letterSpacing: -0.8 },
-  featuredVenueLocation: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  featuredVenueMeta: { flex: 1, color: colors.text, fontSize: 14, lineHeight: 19 },
-  featuredVenueCategory: { color: colors.muted, fontSize: 13 },
-  featuredVenueCta: { color: colors.accent, fontSize: 12, lineHeight: 17, fontWeight: '900', letterSpacing: 0.5 },
-  pressed: { opacity: 0.86, transform: [{ scale: 0.992 }] },
   moreButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 15, borderWidth: 1, borderColor: colors.accent, backgroundColor: 'rgba(226,255,84,0.08)', paddingHorizontal: 14 },
   moreButtonText: { color: colors.accent, fontSize: 13, fontWeight: '900', textAlign: 'center' },
 

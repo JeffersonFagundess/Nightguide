@@ -15,9 +15,10 @@ type Props = {
   featured?: boolean;
   featuredWidth?: number;
   distanceKm?: number | null;
+  demo?: boolean;
 };
 
-export function EventCard({ event, saved, onToggleSaved, featured = false, featuredWidth, distanceKm }: Props) {
+export function EventCard({ event, saved, onToggleSaved, featured = false, featuredWidth, distanceKm, demo = false }: Props) {
   const { language } = usePreferences();
   return (
     <Pressable
@@ -39,7 +40,10 @@ export function EventCard({ event, saved, onToggleSaved, featured = false, featu
         <Heart size={19} color={saved ? colors.ink : colors.text} fill={saved ? colors.ink : 'transparent'} />
       </Pressable>
       <View style={styles.content}>
-        <View style={styles.badge}><Text style={styles.badgeText}>{localizeEventText(event.genre, language)}</Text></View>
+        <View style={styles.badgeRow}>
+          <View style={styles.badge}><Text style={styles.badgeText}>{localizeEventText(event.genre, language)}</Text></View>
+          {demo ? <View style={styles.demoBadge}><Text style={styles.demoBadgeText}>DEMO</Text></View> : null}
+        </View>
         <Text style={[styles.title, featured && styles.titleFeatured]} numberOfLines={2}>{event.title}</Text>
         <View style={styles.metaRow}>
           <MapPin size={14} color={colors.muted} />
@@ -67,8 +71,11 @@ const styles = StyleSheet.create({
   heart: { position: 'absolute', top: 14, right: 14, width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(9,9,11,0.72)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
   heartSaved: { backgroundColor: colors.accent, borderColor: colors.accent },
   content: { marginTop: 'auto', padding: 18, gap: 8 },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   badge: { alignSelf: 'flex-start', backgroundColor: 'rgba(226,255,84,0.15)', borderColor: 'rgba(226,255,84,0.35)', borderWidth: 1, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
   badgeText: { color: colors.accent, fontWeight: '800', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.7 },
+  demoBadge: { borderColor: 'rgba(255,255,255,0.45)', borderWidth: 1, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 999 },
+  demoBadgeText: { color: colors.text, fontWeight: '800', fontSize: 10, letterSpacing: 0.7 },
   title: { color: colors.text, fontSize: 25, lineHeight: 29, fontWeight: '900', letterSpacing: -0.7 },
   titleFeatured: { fontSize: 31, lineHeight: 34 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
