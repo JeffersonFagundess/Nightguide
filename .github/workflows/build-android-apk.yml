@@ -51,7 +51,7 @@ jobs:
         run: |
           pnpm typecheck
           pnpm test:profile
-          node --experimental-strip-types --test tests/discovery-events.test.mjs tests/distance.test.mjs tests/event-period.test.mjs
+          node --experimental-strip-types --test tests/demo-card-checkout.test.mjs tests/discovery-events.test.mjs tests/distance.test.mjs tests/event-period.test.mjs
         working-directory: apps/mobile
 
       - name: Check checkout matching

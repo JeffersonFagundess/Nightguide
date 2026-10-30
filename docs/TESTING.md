@@ -105,6 +105,12 @@ Checkout Pro:
 - confirmar que `approved` gera ingresso uma unica vez; `pending`, `rejected` ou nenhum pagamento nao geram ingresso
 - verificar webhook no painel
 
+Cartao ficticio no APK:
+
+- abrir **Comprar com cartao ficticio (DEMO)** sem abrir o Mercado Pago
+- selecionar cada um dos tres cartoes e testar 1x, 3x e 6x; a soma das parcelas deve ser o total
+- concluir e conferir **DEMO · NAO VALIDO PARA ENTRADA** na carteira, sem QR e sem registro `paid` no Supabase
+
 ## Teste de SQL injection
 
 Como o app usa Supabase client e API routes com validacao, os testes devem focar entradas do usuario:

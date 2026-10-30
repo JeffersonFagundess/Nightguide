@@ -152,7 +152,7 @@ export function UserDataProvider({ children }: PropsWithChildren) {
       setTickets(next);
       await writeJson(scopedKey('nightguide:tickets', scope), next);
 
-      if (user && supabase && isUuid(event.id)) {
+      if (provider !== 'demo' && user && supabase && isUuid(event.id)) {
         const queuedAction = {
           type: 'ticket_purchased' as const,
           userId: user.id,
@@ -186,7 +186,7 @@ export function UserDataProvider({ children }: PropsWithChildren) {
       const next = tickets.filter((item) => item.id !== ticketId);
       setTickets(next);
       await writeJson(scopedKey('nightguide:tickets', scope), next);
-      if (ticket && user && supabase && isUuid(ticket.eventId)) {
+      if (ticket && ticket.provider !== 'demo' && user && supabase && isUuid(ticket.eventId)) {
         const queuedAction = {
           type: 'ticket_cancelled' as const,
           userId: user.id,

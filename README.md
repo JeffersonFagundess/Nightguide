@@ -131,7 +131,7 @@ O app tem tres caminhos:
 
 - Cartao via API do Mercado Pago usando cartoes oficiais de teste.
 - Pix com QR retornado pela API e ingresso somente apos status `approved`.
-- Checkout Pro no APK com verificacao do pagamento pela API antes de gerar o ingresso.
+- Checkout Pro no APK com verificacao do pagamento pela API antes de gerar o ingresso; opcao separada de cartao ficticio parcelado para demonstracao local.
 
 Veja [docs/PAYMENTS.md](docs/PAYMENTS.md) para configurar credenciais e contas de teste.
 

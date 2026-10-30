@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/current-session";
 import { findCheckoutEvent, getMercadoPagoAccessToken, getTicketTotal, mercadoPagoFetch } from "@/lib/mercadopago-server";
+import { getCheckoutBackUrls, getCheckoutSiteOrigin } from "@/lib/mercadopago-back-urls";
 
 type PreferenceBody = {
   eventId?: string;
@@ -40,8 +41,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Esse ingresso nao precisa de pagamento." }, { status: 400 });
     }
 
-    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://nightguide-modern.vercel.app").replace(/\/$/, "");
-    const returnUrl = `${siteUrl}/pagamento/retorno?eventId=${encodeURIComponent(event.id)}`;
+    const siteUrl = getCheckoutSiteOrigin(process.env.NEXT_PUBLIC_SITE_URL);
+    const backUrls = getCheckoutBackUrls(siteUrl, event.id);
     console.info("[NightGuide][MercadoPago][preference:start]", {
       debugId,
       eventId: event.id,
@@ -67,11 +68,7 @@ export async function POST(request: Request) {
           },
         ],
         external_reference: `nightguide:${event.id}:${crypto.randomUUID()}`,
-        back_urls: {
-          success: `${returnUrl}&mp_status=approved`,
-          failure: `${returnUrl}&mp_status=rejected`,
-          pending: `${returnUrl}&mp_status=pending`,
-        },
+        back_urls: backUrls,
         auto_return: "approved",
         notification_url: `${siteUrl}/api/mercadopago/webhook`,
         metadata: {

@@ -73,18 +73,22 @@ function TicketCard({ ticket, onRemove, language }: { ticket: Ticket; onRemove: 
     <View style={styles.ticket}>
       <View style={styles.ticketHeader}>
         <View style={styles.ticketCopy}>
-          <Text style={styles.ticketTag}>{language === 'pt' ? 'INGRESSO APROVADO' : 'APPROVED TICKET'}</Text>
+          <Text style={[styles.ticketTag, ticket.provider === 'demo' && styles.demoTicketTag]}>{ticket.provider === 'demo'
+            ? language === 'pt' ? 'DEMO · NÃO VÁLIDO PARA ENTRADA' : 'DEMO · NOT VALID FOR ENTRY'
+            : language === 'pt' ? 'INGRESSO APROVADO' : 'APPROVED TICKET'}</Text>
           <Text style={styles.ticketTitle}>{ticket.eventTitle}</Text>
           <Text style={styles.ticketMeta}>{ticket.venue}</Text>
           <Text style={styles.ticketMeta}>{ticket.date} • {ticket.time} • {ticket.quantity}x</Text>
         </View>
-        <View style={styles.qr}><QRCode value={ticket.id} size={86} backgroundColor="#FFFFFF" color="#09090B" /></View>
+        <View style={styles.qr}>{ticket.provider === 'demo'
+          ? <Text style={styles.demoQr}>DEMO</Text>
+          : <QRCode value={ticket.id} size={86} backgroundColor="#FFFFFF" color="#09090B" />}</View>
       </View>
       <View style={styles.dash} />
       <View style={styles.ticketFooter}>
         <View>
           <Text style={styles.code}>{ticket.id}</Text>
-          <Text style={styles.payment}>{ticket.paymentLabel} • {formatBRL(ticket.totalAmount)}</Text>
+          <Text style={styles.payment}>{ticket.paymentLabel} • {formatBRL(ticket.totalAmount)}{ticket.provider === 'demo' ? language === 'pt' ? ' (simulado)' : ' (simulated)' : ''}</Text>
         </View>
         <Pressable accessibilityLabel={language === 'pt' ? 'Remover ingresso' : 'Remove ticket'} hitSlop={8} onPress={onRemove} style={styles.trash}>
           <Trash2 size={18} color={colors.rose} />
@@ -95,8 +99,8 @@ function TicketCard({ ticket, onRemove, language }: { ticket: Ticket; onRemove: 
 }
 
 const ticketCopy = {
-  pt: { loading: 'Carregando seus ingressos…', signInTitle: 'Entre para ver seus ingressos', signInText: 'Crie uma conta normal com e-mail e senha ou use o Google quando ele estiver configurado.', signIn: 'Entrar', createAccount: 'Criar minha conta', eyebrow: 'CARTEIRA DIGITAL', title: 'Meus ingressos', subtitle: 'Apresente o QR Code na entrada do evento.', removeTitle: 'Remover ingresso?', removeText: 'Esta ação remove o ingresso deste aparelho.', cancel: 'Cancelar', remove: 'Remover', emptyTitle: 'Nenhum ingresso ainda', emptyText: 'Escolha um evento e conclua o checkout de teste. O ingresso aparecerá aqui.', discover: 'Descobrir eventos' },
-  en: { loading: 'Loading your tickets…', signInTitle: 'Sign in to see your tickets', signInText: 'Create an account with email and password, or use Google when available.', signIn: 'Sign in', createAccount: 'Create my account', eyebrow: 'DIGITAL WALLET', title: 'My tickets', subtitle: 'Show the QR code at the event entrance.', removeTitle: 'Remove ticket?', removeText: 'This removes the ticket from this device.', cancel: 'Cancel', remove: 'Remove', emptyTitle: 'No tickets yet', emptyText: 'Choose an event and complete the test checkout. Your ticket will appear here.', discover: 'Discover events' },
+  pt: { loading: 'Carregando seus ingressos…', signInTitle: 'Entre para ver seus ingressos', signInText: 'Crie uma conta normal com e-mail e senha ou use o Google quando ele estiver configurado.', signIn: 'Entrar', createAccount: 'Criar minha conta', eyebrow: 'CARTEIRA DIGITAL', title: 'Meus ingressos', subtitle: 'Ingressos DEMO são apenas visuais e não valem para entrada.', removeTitle: 'Remover ingresso?', removeText: 'Esta ação remove o ingresso deste aparelho.', cancel: 'Cancelar', remove: 'Remover', emptyTitle: 'Nenhum ingresso ainda', emptyText: 'Escolha um evento e conclua o checkout de teste. O ingresso aparecerá aqui.', discover: 'Descobrir eventos' },
+  en: { loading: 'Loading your tickets…', signInTitle: 'Sign in to see your tickets', signInText: 'Create an account with email and password, or use Google when available.', signIn: 'Sign in', createAccount: 'Create my account', eyebrow: 'DIGITAL WALLET', title: 'My tickets', subtitle: 'DEMO tickets are visual only and are not valid for entry.', removeTitle: 'Remove ticket?', removeText: 'This removes the ticket from this device.', cancel: 'Cancel', remove: 'Remove', emptyTitle: 'No tickets yet', emptyText: 'Choose an event and complete the test checkout. Your ticket will appear here.', discover: 'Discover events' },
 } as const;
 
 const styles = StyleSheet.create({
@@ -111,9 +115,11 @@ const styles = StyleSheet.create({
   ticketHeader: { flexDirection: 'row', gap: 14 },
   ticketCopy: { flex: 1 },
   ticketTag: { color: colors.success, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  demoTicketTag: { color: colors.warning },
   ticketTitle: { color: colors.text, fontSize: 21, fontWeight: '900', marginTop: 7 },
   ticketMeta: { color: colors.muted, fontSize: 13, lineHeight: 19, marginTop: 2 },
   qr: { backgroundColor: '#FFFFFF', padding: 7, borderRadius: 10 },
+  demoQr: { width: 86, height: 86, textAlign: 'center', textAlignVertical: 'center', color: '#09090B', fontSize: 19, fontWeight: '900' },
   dash: { borderTopWidth: 1, borderStyle: 'dashed', borderColor: colors.border, marginVertical: 16 },
   ticketFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   code: { color: colors.accent, fontSize: 12, fontWeight: '900' },

@@ -27,7 +27,7 @@ POST /api/mercadopago/webhook
 GET  /api/mercadopago/webhook
 ```
 
-## Cartao dentro do app
+## Cartao na web via API
 
 Fluxo:
 
@@ -35,7 +35,7 @@ Fluxo:
 2. O formulario web envia os dados de teste para tokenizacao com a Public Key.
 3. Backend recebe token, evento, quantidade e metodo.
 4. Backend chama `/v1/payments` do Mercado Pago usando Access Token.
-5. Se aprovado, o app mostra confirmacao na tela e salva ingresso local.
+5. Se aprovado, o site mostra confirmacao na tela e salva ingresso local.
 6. Mercado Pago dispara webhook `payment.created` se `notification_url` estiver configurada.
 
 Status de teste:
@@ -49,14 +49,14 @@ Status de teste:
 - `EXPI`: validade invalida
 - `FORM`: erro de formulario
 
-## Pix dentro do app
+## Pix na web via API
 
 Fluxo ideal:
 
 1. Usuario escolhe Pix.
 2. Backend cria pagamento `payment_method_id: pix`.
 3. Mercado Pago retorna QR Code e copia e cola.
-4. App abre modal Pix com QR, codigo e status.
+4. O site abre modal Pix com QR, codigo e status.
 5. Usuario copia o codigo e consulta o status.
 6. O ingresso so e liberado se a API do Mercado Pago responder `approved`.
 
@@ -71,7 +71,7 @@ Fluxo:
 3. Retorna `init_point` ou `sandbox_init_point`.
 4. O APK abre o `init_point` oficial no navegador do Mercado Pago.
 5. Usuario usa uma conta compradora de teste diferente da vendedora e um cartao oficial de teste.
-6. O retorno HTTPS mostra um link para voltar ao app. Ao fechar o navegador, o app consulta `GET /api/payments/mercadopago/preference/[preferenceId]` e permite tocar em **Verificar pagamento** novamente.
+6. O retorno HTTPS mostra um link para voltar ao app. As `back_urls` usam três caminhos HTTPS sem parâmetros próprios de consulta (`/pagamento/retorno/aprovado`, `/recusado`, `/pendente` seguidos do ID do evento). A origem configurada é validada e, se inválida, usa o domínio público padrão. Ao fechar o navegador, o app consulta `GET /api/payments/mercadopago/preference/[preferenceId]` e permite tocar em **Verificar pagamento** novamente.
 7. O servidor busca a preferencia e os pagamentos pela `external_reference` exclusiva. Confere usuario, evento e valor; so `approved` gera ingresso. `pending`, `rejected` e ausencia de pagamento nao geram ingresso.
 8. Webhook e enviado para `/api/mercadopago/webhook`.
 
@@ -87,7 +87,13 @@ Para Checkout Pro funcionar em teste:
 
 Sem credenciais de teste configuradas no deploy e uma conta compradora de teste, o checkout de cartao nao pode ser validado de ponta a ponta. Nao coloque chaves no Git; configure-as nas variaveis do ambiente de hospedagem.
 
-Referencias oficiais: [cartoes de teste](https://www.mercadopago.com.br/developers/pt/docs/checkout-pro-preferences/integration-test/test-purchases), [contas de teste](https://www.mercadopago.com.br/developers/pt/docs/checkout-pro-preferences/test-accounts) e [busca de pagamentos](https://www.mercadopago.com.br/developers/pt/reference/online-payments/subscriptions/search-payments/get).
+Referencias oficiais: [URLs de retorno](https://www.mercadopago.com.br/developers/pt/docs/checkout-pro-preferences/configure-back-urls), [cartoes de teste](https://www.mercadopago.com.br/developers/pt/docs/checkout-pro-preferences/integration-test/test-purchases), [contas de teste](https://www.mercadopago.com.br/developers/pt/docs/checkout-pro-preferences/test-accounts) e [busca de pagamentos](https://www.mercadopago.com.br/developers/pt/reference/online-payments/subscriptions/search-payments/get).
+
+## Compra com cartao ficticio no APK
+
+O botao **Comprar com cartao ficticio (DEMO)** abre um fluxo local separado do Checkout Pro. O usuario escolhe Visa, Mastercard ou Elo ficticio (apenas quatro digitos de exibicao), seleciona 1, 2, 3, 4 ou 6 parcelas sem juros e ve os valores das parcelas, incluindo eventual ajuste de centavos na primeira. Ao concluir, o app salva um ingresso de demonstracao neste aparelho.
+
+Esse fluxo nao envia numero de cartao, token nem pagamento para o Mercado Pago. Nao cobra o usuario, nao grava `tickets.status=paid` no Supabase e nao gera QR valido para entrada. O botao **Abrir Mercado Pago** continua disponivel para o checkout oficial; nele, somente a resposta aprovada da API libera um ingresso real.
 
 ## Webhook
 

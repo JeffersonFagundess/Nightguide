@@ -128,5 +128,5 @@ depois reabra em modo aviao. Atualizacoes publicas de outro aparelho dependem do
 envio online do autor e de atualizar/abrir novamente o feed ou perfil.
 
 `pnpm test:profile` executa testes de persistencia/edicao do perfil e privacidade,
-cache offline e troca de fotos do perfil publico. A publicacao do APK `1.3.2`
+cache offline e troca de fotos do perfil publico. A publicacao do APK `1.3.3`
 e automatica em Releases ao concluir com sucesso o workflow da branch `main`.
