@@ -62,6 +62,12 @@ Fluxo ideal:
 
 Se o Mercado Pago recusar a criacao do Pix, o erro e mostrado. Nao e gerado QR alternativo nem ingresso pago.
 
+## Pix no APK
+
+Na tela de checkout do Android, **Pagar com Pix** aparece junto de **Abrir Mercado Pago** e **Comprar com cartao ficticio (DEMO)**. O comprador confirma e-mail e CPF, toca em **Gerar QR code Pix** e o app chama `POST /api/payments/mercadopago` com `method: pix` e a sessao autenticada. O app mostra o QR code retornado pelo Mercado Pago, o codigo copia e cola e o ID/status do pagamento. O botao de copiar usa a area de transferencia do aparelho.
+
+Depois de pagar, **Verificar pagamento Pix** consulta `GET /api/payments/mercadopago/[paymentId]`. Somente `approved` cria ingresso real; `pending`, `rejected` e erro deixam o ingresso bloqueado. A quantidade fica fixa depois da geracao do Pix para que o total exibido corresponda ao pagamento. Cartoes ficticios continuam sendo uma simulacao local separada, sem cobranca.
+
 ## Checkout Pro
 
 Fluxo:

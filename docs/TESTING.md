@@ -111,6 +111,15 @@ Cartao ficticio no APK:
 - selecionar cada um dos tres cartoes e testar 1x, 3x e 6x; a soma das parcelas deve ser o total
 - concluir e conferir **DEMO · NAO VALIDO PARA ENTRADA** na carteira, sem QR e sem registro `paid` no Supabase
 
+Pix no APK:
+
+- conferir que **Pagar com Pix**, **Abrir Mercado Pago** e **Comprar com cartao ficticio (DEMO)** aparecem no checkout de evento pago
+- informar e-mail e CPF de teste, gerar Pix e confirmar que o QR e o codigo copia e cola vieram da API
+- copiar o codigo e conferir na area de transferencia do Android
+- consultar um Pix pendente e confirmar que nenhum ingresso e criado
+- depois de uma aprovacao real no ambiente de teste, consultar novamente e confirmar um unico ingresso Mercado Pago
+- conferir que erro na geracao nao produz QR alternativo nem ingresso
+
 ## Teste de SQL injection
 
 Como o app usa Supabase client e API routes com validacao, os testes devem focar entradas do usuario:

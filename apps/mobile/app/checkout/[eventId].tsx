@@ -1,8 +1,9 @@
 import * as WebBrowser from 'expo-web-browser';
+import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
-import { CheckCircle2, CreditCard, Minus, Plus, ShieldCheck, Ticket } from 'lucide-react-native';
+import { CheckCircle2, Copy, CreditCard, Minus, Plus, QrCode, ShieldCheck, Ticket } from 'lucide-react-native';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 
 import { Button } from '@/src/components/button';
@@ -17,6 +18,13 @@ import { useUserData } from '@/src/providers/user-data-provider';
 import { usePreferences } from '@/src/providers/preferences-provider';
 import { colors } from '@/src/theme';
 import type { Ticket as TicketType } from '@/src/types';
+
+type PixPayment = {
+  id: string;
+  status: string;
+  qrCode?: string;
+  qrCodeBase64?: string;
+};
 
 export default function CheckoutScreen() {
   const { eventId } = useLocalSearchParams<{ eventId: string }>();
@@ -36,6 +44,10 @@ export default function CheckoutScreen() {
   const [demoCardOpen, setDemoCardOpen] = useState(false);
   const [selectedDemoCardId, setSelectedDemoCardId] = useState<string>(demoCards[0].id);
   const [installmentCount, setInstallmentCount] = useState(1);
+  const [pixPayment, setPixPayment] = useState<PixPayment | null>(null);
+  const [pixEmail, setPixEmail] = useState(user?.email ?? '');
+  const [pixCpf, setPixCpf] = useState('12345678909');
+  const [pixCopied, setPixCopied] = useState(false);
 
   if (!event) return <Screen contentStyle={styles.center}><EmptyState title={t.eventNotFound} text={t.eventNotFoundText} action={{ label: t.back, onPress: () => router.back() }} /></Screen>;
   if (!user) return <Screen contentStyle={styles.center}><EmptyState title={t.signInTitle} text={t.signInText} action={{ label: t.signIn, onPress: () => router.replace({ pathname: '/auth/login', params: { next: `/checkout/${eventId}` } }) }} /></Screen>;
@@ -45,6 +57,7 @@ export default function CheckoutScreen() {
   const isFree = unitAmount === 0;
   const selectedDemoCard = demoCards.find(card => card.id === selectedDemoCardId) ?? demoCards[0];
   const installmentPlan = splitDemoInstallments(total, installmentCount);
+  const pixInactive = pixPayment?.status === 'rejected' || pixPayment?.status === 'cancelled';
 
   async function finish(label: string, provider: TicketType['provider'], paymentId?: string) {
     setLoading(true);
@@ -110,6 +123,64 @@ export default function CheckoutScreen() {
     }
   }
 
+  async function createPix() {
+    setLoading(true);
+    setError('');
+    try {
+      if (!session?.access_token) throw new Error(t.sessionExpired);
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(pixEmail.trim()) || pixCpf.length !== 11) throw new Error(d.pixPayerInvalid);
+      const response = await fetch(`${env.apiUrl}/api/payments/mercadopago`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ method: 'pix', eventId: event!.id, quantity, payerEmail: pixEmail.trim(), identificationType: 'CPF', identificationNumber: pixCpf }),
+      });
+      const data = (await response.json()) as { payment?: PixPayment; error?: string };
+      if (!response.ok || !data.payment?.id) throw new Error(data.error || d.pixCreateError);
+      if (!data.payment.qrCode && !data.payment.qrCodeBase64) throw new Error(d.pixQrMissing);
+      setPixCopied(false);
+      setPixPayment(data.payment);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : d.pixCreateError);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function checkPix() {
+    if (!pixPayment) return;
+    setLoading(true);
+    setError('');
+    try {
+      if (!session?.access_token) throw new Error(t.sessionExpired);
+      const response = await fetch(`${env.apiUrl}/api/payments/mercadopago/${encodeURIComponent(pixPayment.id)}`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const data = (await response.json()) as { payment?: PixPayment; error?: string };
+      if (!response.ok || !data.payment) throw new Error(data.error || t.paymentError);
+      if (data.payment.status === 'approved') {
+        await finish(`${d.pixPaymentLabel} #${data.payment.id}`, 'mercadopago', data.payment.id);
+      } else {
+        setPixPayment({ ...pixPayment, ...data.payment, qrCode: data.payment.qrCode || pixPayment.qrCode, qrCodeBase64: data.payment.qrCodeBase64 || pixPayment.qrCodeBase64 });
+        setError(data.payment.status === 'rejected' || data.payment.status === 'cancelled' ? d.pixRejected : d.pixPending);
+      }
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : t.paymentError);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function copyPix() {
+    if (!pixPayment?.qrCode) return;
+    try {
+      await Clipboard.setStringAsync(pixPayment.qrCode);
+      setPixCopied(true);
+      setError('');
+    } catch {
+      setError(d.pixCopyError);
+    }
+  }
+
   if (ticket) {
     return (
       <Screen contentStyle={styles.successContent}>
@@ -135,9 +206,9 @@ export default function CheckoutScreen() {
       <View style={styles.panel}>
         <Text style={styles.label}>{t.quantity}</Text>
         <View style={styles.quantityRow}>
-          <Pressable disabled={quantity <= 1 || Boolean(preferenceId)} onPress={() => setQuantity((value) => Math.max(1, value - 1))} style={styles.quantityButton}><Minus size={20} color={colors.text} /></Pressable>
+          <Pressable disabled={quantity <= 1 || Boolean(preferenceId || pixPayment)} onPress={() => setQuantity((value) => Math.max(1, value - 1))} style={styles.quantityButton}><Minus size={20} color={colors.text} /></Pressable>
           <Text style={styles.quantity}>{quantity}</Text>
-          <Pressable disabled={quantity >= 6 || Boolean(preferenceId)} onPress={() => setQuantity((value) => Math.min(6, value + 1))} style={styles.quantityButton}><Plus size={20} color={colors.text} /></Pressable>
+          <Pressable disabled={quantity >= 6 || Boolean(preferenceId || pixPayment)} onPress={() => setQuantity((value) => Math.min(6, value + 1))} style={styles.quantityButton}><Plus size={20} color={colors.text} /></Pressable>
         </View>
         <View style={styles.totalRow}><Text style={styles.totalLabel}>{t.total}</Text><Text style={styles.total}>{isFree ? t.free : formatBRL(total)}</Text></View>
       </View>
@@ -149,6 +220,32 @@ export default function CheckoutScreen() {
         <Button label={t.freeTicket} icon={Ticket} onPress={() => void finish(t.freeTicketLabel, 'free')} loading={loading} />
       ) : (
         <View style={styles.actions}>
+          {pixPayment ? (
+            <View style={styles.pixPanel}>
+              <Text style={styles.demoPanelTitle}>{d.pixTitle}</Text>
+              {!pixInactive ? <Text style={styles.demoText}>{d.pixInstructions}</Text> : null}
+              {!pixInactive ? <View style={styles.pixQr}>
+                {pixPayment.qrCode
+                  ? <QRCode value={pixPayment.qrCode} size={210} color="#09090B" backgroundColor="#FFFFFF" />
+                  : <Image source={{ uri: `data:image/png;base64,${pixPayment.qrCodeBase64}` }} style={styles.pixQrImage} />}
+              </View> : null}
+              <Text style={styles.pixStatus}>{d.pixStatus}: {pixPayment.status === 'pending' ? d.pixPendingStatus : pixPayment.status}</Text>
+              <Text style={styles.demoText}>{d.pixPaymentId}: {pixPayment.id}</Text>
+              {!pixInactive && pixPayment.qrCode ? <Text selectable style={styles.pixCode}>{pixPayment.qrCode}</Text> : null}
+              {!pixInactive && pixPayment.qrCode ? <Button label={pixCopied ? d.pixCopied : d.pixCopy} icon={Copy} variant="secondary" onPress={() => void copyPix()} /> : null}
+              {pixInactive
+                ? <Button label={d.pixRetry} onPress={() => { setPixPayment(null); setError(''); }} disabled={loading} />
+                : <Button label={d.pixCheck} icon={CheckCircle2} onPress={() => void checkPix()} loading={loading} />}
+              {!pixInactive ? <Text style={styles.demoText}>{d.pixPendingHint}</Text> : null}
+            </View>
+          ) : (
+            <View style={styles.pixPanel}>
+              <Text style={styles.demoPanelTitle}>{d.pixTitle}</Text>
+              <TextInput value={pixEmail} onChangeText={setPixEmail} placeholder={d.pixEmail} placeholderTextColor={colors.muted} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} style={styles.pixInput} accessibilityLabel={d.pixEmail} />
+              <TextInput value={pixCpf} onChangeText={value => setPixCpf(value.replace(/\D/g, '').slice(0, 11))} placeholder={d.pixCpf} placeholderTextColor={colors.muted} keyboardType="number-pad" style={styles.pixInput} accessibilityLabel={d.pixCpf} />
+              <Button label={d.pixGenerate} icon={QrCode} onPress={() => void createPix()} loading={loading} />
+            </View>
+          )}
           <Button label={t.openPayment} icon={CreditCard} onPress={() => void openMercadoPago()} loading={loading} />
           {preferenceId ? <Button label={t.checkPayment} icon={CheckCircle2} variant="secondary" onPress={() => void checkPayment(preferenceId)} loading={loading} /> : null}
           <Text style={styles.demoText}>{d.mpHint}</Text>
@@ -193,6 +290,26 @@ const checkoutCopy = {
 
 const demoCopy = {
   pt: {
+    pixTitle: 'Pagar com Pix',
+    pixEmail: 'E-mail do comprador',
+    pixCpf: 'CPF do comprador (11 dígitos)',
+    pixPayerInvalid: 'Informe um e-mail válido e um CPF com 11 dígitos.',
+    pixGenerate: 'Gerar QR code Pix',
+    pixCreateError: 'Não foi possível gerar o Pix.',
+    pixQrMissing: 'O Mercado Pago não retornou o QR code Pix.',
+    pixInstructions: 'Escaneie o QR code em outro aparelho ou copie o código Pix.',
+    pixStatus: 'Status',
+    pixPaymentId: 'Pagamento',
+    pixPendingStatus: 'Aguardando pagamento',
+    pixCopy: 'Copiar código Pix',
+    pixCopied: 'Código Pix copiado',
+    pixCopyError: 'Não foi possível copiar o código Pix.',
+    pixCheck: 'Verificar pagamento Pix',
+    pixRetry: 'Gerar outro Pix',
+    pixPendingHint: 'O ingresso só será liberado após o Mercado Pago confirmar o pagamento.',
+    pixPending: 'Pix ainda não aprovado. Após pagar, toque em Verificar pagamento Pix.',
+    pixRejected: 'Pix recusado ou cancelado pelo Mercado Pago.',
+    pixPaymentLabel: 'Mercado Pago Pix',
     mpHint: 'Checkout oficial do Mercado Pago. Requer uma conta compradora de teste e os cartões oficiais de teste.',
     openDemoCards: 'Comprar com cartão fictício (DEMO)',
     demoBadge: 'SIMULAÇÃO · SEM COBRANÇA',
@@ -208,6 +325,26 @@ const demoCopy = {
     demoSuccessText: 'Ingresso de demonstração salvo neste aparelho. Não é válido para entrada no evento.',
   },
   en: {
+    pixTitle: 'Pay with Pix',
+    pixEmail: 'Buyer email',
+    pixCpf: 'Buyer CPF (11 digits)',
+    pixPayerInvalid: 'Enter a valid email and an 11-digit CPF.',
+    pixGenerate: 'Generate Pix QR code',
+    pixCreateError: 'Unable to generate Pix payment.',
+    pixQrMissing: 'Mercado Pago did not return a Pix QR code.',
+    pixInstructions: 'Scan the QR code on another device or copy the Pix code.',
+    pixStatus: 'Status',
+    pixPaymentId: 'Payment',
+    pixPendingStatus: 'Awaiting payment',
+    pixCopy: 'Copy Pix code',
+    pixCopied: 'Pix code copied',
+    pixCopyError: 'Unable to copy the Pix code.',
+    pixCheck: 'Check Pix payment',
+    pixRetry: 'Generate another Pix',
+    pixPendingHint: 'A ticket is issued only after Mercado Pago confirms payment.',
+    pixPending: 'Pix is not approved yet. After paying, tap Check Pix payment.',
+    pixRejected: 'Pix payment was rejected or cancelled by Mercado Pago.',
+    pixPaymentLabel: 'Mercado Pago Pix',
     mpHint: 'Official Mercado Pago checkout. Requires a test buyer account and official test cards.',
     openDemoCards: 'Buy with fictional card (DEMO)',
     demoBadge: 'SIMULATION · NO CHARGE',
@@ -241,6 +378,12 @@ const styles = StyleSheet.create({
   safeText: { color: colors.muted, fontSize: 12, lineHeight: 18, flex: 1 },
   error: { color: colors.rose, padding: 12, borderRadius: 12, backgroundColor: 'rgba(255,107,131,0.09)', marginBottom: 14 },
   actions: { gap: 11 },
+  pixPanel: { gap: 11, padding: 15, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  pixInput: { minHeight: 48, paddingHorizontal: 12, borderRadius: 11, borderWidth: 1, borderColor: colors.border, color: colors.text, backgroundColor: colors.elevated },
+  pixQr: { alignSelf: 'center', padding: 12, borderRadius: 15, backgroundColor: '#FFFFFF' },
+  pixQrImage: { width: 210, height: 210 },
+  pixStatus: { color: colors.text, fontWeight: '800', textAlign: 'center' },
+  pixCode: { color: colors.muted, fontSize: 11, lineHeight: 16, padding: 10, borderRadius: 10, backgroundColor: colors.elevated },
   demoText: { color: colors.muted, textAlign: 'center', fontSize: 11, lineHeight: 17 },
   testHelp: { color: colors.muted, fontSize: 12, lineHeight: 19, padding: 12, borderRadius: 12, backgroundColor: colors.surface },
   demoPanel: { gap: 10, padding: 15, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
